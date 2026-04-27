@@ -1,0 +1,20 @@
+{
+  "name": "@driveai/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "drive-ai": "dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@driveai/core": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,19 @@
+/* Token-based theming: no hardcoded hex in components—use var(--dri-*) */
+:root {
+  --dri-surface-0: var(--ds-bg-canvas, #fafafa);
+  --dri-surface-1: var(--ds-bg-subtle, #f4f4f5);
+  --dri-border: var(--ds-border, #e4e4e7);
+  --dri-text: var(--ds-fg, #18181b);
+  --dri-text-muted: var(--ds-fg-muted, #71717a);
+  --dri-primary: var(--ds-accent, #3b82f6);
+  --dri-radius: 8px;
+  --dri-focus: 2px solid var(--dri-primary);
+}
+[data-theme="dark"] {
+  --dri-surface-0: var(--ds-bg-canvas, #09090b);
+  --dri-surface-1: var(--ds-bg-subtle, #18181b);
+  --dri-border: var(--ds-border, #27272a);
+  --dri-text: var(--ds-fg, #fafafa);
+  --dri-text-muted: var(--ds-fg-muted, #a1a1aa);
+  --dri-primary: var(--ds-accent, #60a5fa);
+}

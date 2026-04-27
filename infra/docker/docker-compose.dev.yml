@@ -1,0 +1,32 @@
+# Postgres + MinIO for local development (ports avoid mail-ai / collab defaults).
+# Postgres: 35432, MinIO API: 39000, MinIO console: 39001
+#
+# Explicit project name so this stack does not collide with pages-ai (or any repo
+# whose compose file lives under infra/docker — Compose would otherwise use "docker").
+name: driveai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: driveai
+      POSTGRES_PASSWORD: driveai
+      POSTGRES_DB: driveai
+    ports:
+      - "35432:5432"
+    volumes:
+      - driveai-pg:/var/lib/postgresql/data
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: driveai
+      MINIO_ROOT_PASSWORD: driveaidevlocal
+    ports:
+      - "39000:9000"
+      - "39001:9001"
+    volumes:
+      - driveai-minio:/data
+volumes:
+  driveai-pg:
+  driveai-minio:

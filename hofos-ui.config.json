@@ -1,0 +1,25 @@
+{
+  "product": "driveai",
+  "hofOsPath": "../hof-os",
+  "harness": {
+    "mode": "hofos",
+    "command": "HOFOS_MODE=1 pnpm --filter @driveai/web build",
+    "requiredRoutes": [
+      "/drive",
+      "/drive/my-drive",
+      "/drive/shared-with-me",
+      "/drive/shared-drives",
+      "/drive/recent",
+      "/drive/starred",
+      "/drive/trash",
+      "/drive/f/example-folder",
+      "/drive/file/example-file",
+      "/drive/search"
+    ],
+    "requiredProxyPrefix": "/api/drive",
+    "officeAiAttachmentContract": "Open Office files via hofOS driveHostCapabilities / same EditAssetEditorMount; no second @officeai/react-editors bundle in driveai."
+  },
+  "export": {
+    "outDir": "release-out/hofos-ui"
+  }
+}
