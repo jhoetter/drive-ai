@@ -22,7 +22,8 @@
     "format:check": "prettier --check .",
     "hofos:check": "node scripts/check-hofos-ui-contract.mjs",
     "hofos:harness": "HOFOS_MODE=1 pnpm --filter @driveai/web build && node scripts/check-hofos-harness-smoke.mjs",
-    "export:hofos-ui": "node scripts/export-hofos-ui.mjs"
+    "export:hofos-ui": "node scripts/export-hofos-ui.mjs",
+    "build:dist": "pnpm --filter @driveai/hofos-ui build:dist"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

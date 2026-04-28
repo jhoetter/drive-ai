@@ -11,7 +11,7 @@ on:
         required: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -72,6 +72,30 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/drive-ai-server:${{ steps.version.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/drive-ai-server:${{ steps.version.outputs.tag }}
+
+
+      - name: Build hofOS UI tarball
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          pnpm run build:dist
+          test -f "packages/hofos-ui/dist/index.js" || (echo "missing packages/hofos-ui/dist/index.js" && exit 1)
+          npm --prefix packages/hofos-ui version --no-git-tag-version --allow-same-version "${VERSION}"
+          pnpm --dir packages/hofos-ui pack --pack-destination .
+          mv driveai-hofos-ui-*.tgz "driveai-ui-${VERSION}.tgz"
+          ls -lh "driveai-ui-${VERSION}.tgz"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" \
+            "driveai-ui-${VERSION}.tgz" \
+            --title "${TAG}" \
+            --generate-notes
 
       - name: Notify hofOS
         env:
