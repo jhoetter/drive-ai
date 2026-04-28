@@ -1,5 +1,5 @@
 import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
+import { I18nextProvider } from "react-i18next";
 import { Suspense, type ReactNode } from "react";
 
 const en = {
@@ -97,7 +97,7 @@ const de: Record<keyof typeof en, string> = {
 };
 
 const i18n = createInstance();
-void i18n.use(initReactI18next).init({
+void i18n.init({
   resources: { en: { trans: en }, de: { trans: de } },
   ns: ["trans"],
   defaultNS: "trans",

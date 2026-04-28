@@ -1,0 +1,92 @@
+name: Release DriveAI sidecar
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, without leading v"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    name: Build and publish server image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION#v}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate
+        run: |
+          pnpm run hofos:check
+          pnpm run hofos:harness
+          pnpm --filter @driveai/server... build
+          pnpm --filter @driveai/server test
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/drive-ai-server:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/drive-ai-server:${{ steps.version.outputs.tag }}
+
+      - name: Notify hofOS
+        env:
+          HOFOS_DISPATCH_TOKEN: ${{ secrets.HOFOS_DISPATCH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SOURCE_SHA: ${{ github.sha }}
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/drive-ai-server:${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "${HOFOS_DISPATCH_TOKEN}" ]; then
+            echo "HOFOS_DISPATCH_TOKEN is not set; skipping hofOS dispatch."
+            exit 0
+          fi
+          export GH_TOKEN="${HOFOS_DISPATCH_TOKEN}"
+          gh api repos/jhoetter/hof-os/dispatches \
+            -X POST \
+            -f event_type=driveai-released \
+            -f client_payload="{\"version\":\"${VERSION}\",\"tag\":\"${TAG}\",\"source_sha\":\"${SOURCE_SHA}\",\"image_ref\":\"${IMAGE_REF}\"}"

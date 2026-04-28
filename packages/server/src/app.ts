@@ -57,6 +57,9 @@ export async function buildApp(deps: AppDeps) {
   await app.register(websocket);
 
   app.addHook("preHandler", async (req) => {
+    if (req.url === "/api/health" || req.url === "/api/ws-ping") {
+      return;
+    }
     const i = await deps.identity({ headers: req.headers as Record<string, unknown> });
     (req as unknown as { identity: typeof i }).identity = i;
   });

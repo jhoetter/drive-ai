@@ -1,0 +1,11 @@
+node_modules
+dist
+.turbo
+.git
+.env
+.env.local
+release-out
+coverage
+apps/web/dist
+packages/*/dist
+packages/*/.turbo

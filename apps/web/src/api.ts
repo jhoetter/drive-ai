@@ -1,9 +1,23 @@
 import type { SearchResponse, SearchFilters } from "@driveai/search";
 
-const base = "";
+declare global {
+  interface Window {
+    __DRIVEAI_API_BASE__?: string;
+  }
+}
+
+function apiBase(): string {
+  if (typeof window !== "undefined") {
+    const runtimeBase = window.__DRIVEAI_API_BASE__?.replace(/\/$/, "");
+    if (runtimeBase) return runtimeBase;
+  }
+  const hofosMode = (import.meta as unknown as { env?: { HOFOS_MODE?: boolean } }).env
+    ?.HOFOS_MODE;
+  return hofosMode ? "/api/drive" : "";
+}
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${base}${path}`, {
+  const r = await fetch(`${apiBase()}${path}`, {
     ...init,
     headers: { "content-type": "application/json", ...init?.headers },
   });
@@ -21,7 +35,7 @@ export type DriveItem = {
 };
 
 async function commandJson<T>(name: string, payload: Record<string, unknown>): Promise<T> {
-  const r = await fetch(`${base}/api/commands`, {
+  const r = await fetch(`${apiBase()}/api/commands`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name, payload }),

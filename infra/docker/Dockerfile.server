@@ -1,0 +1,20 @@
+FROM node:22-alpine
+
+WORKDIR /app
+
+ENV PORT=3520
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY apps ./apps
+COPY packages ./packages
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @driveai/server... build
+
+ENV NODE_ENV=production
+
+EXPOSE 3520
+
+CMD ["sh", "-c", "pnpm --dir packages/db exec drizzle-kit push && exec pnpm --filter @driveai/server dev"]

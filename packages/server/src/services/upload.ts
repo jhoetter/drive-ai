@@ -43,7 +43,9 @@ export async function initUpload(
   if (!p) throw new DriveAiError("parent missing", "invalid", ExitCode.UserError);
   const fileId = newPrefixed("fil");
   const ext = name.includes(".") ? (name.split(".").pop() ?? "") : "";
-  const s3Key = `tenants/${i.tenantId}/files/${fileId}/${name}`;
+  const keyPrefix =
+    process.env.S3_KEY_PREFIX?.replace(/\/+$/, "") ?? `tenants/${i.tenantId}/drive`;
+  const s3Key = `${keyPrefix}/files/${fileId}/${name}`;
   await db.insert(items).values({
     id: fileId,
     driveId: p.driveId,

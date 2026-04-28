@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router";
 
 /**
  * Left-rail nav link with token-based active state for design-system hosts (`--dri-*` / `--ds-*`).
  */
 export function DriveNavItem(props: { to: string; active: boolean; children: ReactNode }) {
   return (
-    <Link
-      to={props.to}
+    <a
+      href={props.to}
       aria-current={props.active ? "page" : undefined}
       style={{
         display: "block",
@@ -22,6 +21,6 @@ export function DriveNavItem(props: { to: string; active: boolean; children: Rea
       }}
     >
       {props.children}
-    </Link>
+    </a>
   );
 }
