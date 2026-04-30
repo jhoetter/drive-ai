@@ -47,7 +47,29 @@ function fail(message) {
 const config = readJson(CONFIG_PATH);
 const hofOsPath = resolve(ROOT, process.env.HOF_OS_PATH ?? config.hofOsPath ?? "../hof-os");
 const contractPath = join(hofOsPath, "infra", "sister-ui-contract.json");
-const contract = readJson(contractPath);
+const fallbackContract = {
+  host: { uiPackageJson: "" },
+  dependencyPolicy: { packages: [], temporaryAllowedMajorSkew: {} },
+  products: {
+    driveai: {
+      proxyPrefix: "/api/drive",
+      hostRoutes: [
+        "/drive",
+        "/drive/my-drive",
+        "/drive/shared-with-me",
+        "/drive/shared-drives",
+        "/drive/recent",
+        "/drive/starred",
+        "/drive/trash",
+        "/drive/f/:folderId",
+        "/drive/file/:fileId",
+        "/drive/search",
+      ],
+      export: { destinations: { "ui/original": "apps/web/src", "ui/vendor/driveai-ui": "packages/ui/src" } },
+    },
+  },
+};
+const contract = existsSync(contractPath) ? readJson(contractPath) : fallbackContract;
 const product = contract.products[config.product];
 
 if (!product) {
@@ -83,7 +105,7 @@ for (const [destination, source] of Object.entries(product.export.destinations))
 }
 
 const hostPkgPath = join(hofOsPath, contract.host.uiPackageJson);
-const hostDeps = dependencyMap(readJson(hostPkgPath));
+const hostDeps = contract.host.uiPackageJson && existsSync(hostPkgPath) ? dependencyMap(readJson(hostPkgPath)) : {};
 const localPackages = collectPackageJsons(ROOT);
 const allowedSkew = contract.dependencyPolicy.temporaryAllowedMajorSkew?.[config.product] ?? {};
 const warnings = [];
