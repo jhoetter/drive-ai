@@ -110,7 +110,16 @@ jobs:
             exit 0
           fi
           export GH_TOKEN="${HOFOS_DISPATCH_TOKEN}"
+          payload="$(jq -nc \
+            --arg version "${VERSION}" \
+            --arg tag "${TAG}" \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg image_ref "${IMAGE_REF}" \
+            '{version: $version, tag: $tag, source_sha: $source_sha, image_ref: $image_ref}')"
+          request="$(jq -nc \
+            --arg event_type driveai-released \
+            --argjson client_payload "${payload}" \
+            '{event_type: $event_type, client_payload: $client_payload}')"
           gh api repos/jhoetter/hof-os/dispatches \
-            -X POST \
-            -f event_type=driveai-released \
-            -f client_payload="{\"version\":\"${VERSION}\",\"tag\":\"${TAG}\",\"source_sha\":\"${SOURCE_SHA}\",\"image_ref\":\"${IMAGE_REF}\"}"
+            --method POST \
+            --input - <<< "${request}"
