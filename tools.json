@@ -8,6 +8,48 @@
       "command": "drive-agent status",
       "summary": "Return DriveAI status.",
       "args": []
+    },
+    {
+      "name": "file list",
+      "command": "drive-agent file list",
+      "summary": "List files in a folder.",
+      "args": [{ "name": "folder", "type": "string", "required": false }]
+    },
+    {
+      "name": "file upload",
+      "command": "drive-agent file upload",
+      "summary": "Upload a local file to DriveAI.",
+      "args": [
+        { "name": "path", "type": "string", "required": true },
+        { "name": "to", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "file download",
+      "command": "drive-agent file download",
+      "summary": "Download a file by key.",
+      "args": [{ "name": "key", "type": "string", "required": true }]
+    },
+    {
+      "name": "folder create",
+      "command": "drive-agent folder create",
+      "summary": "Create a folder.",
+      "args": [{ "name": "path", "type": "string", "required": true }]
+    },
+    {
+      "name": "file move",
+      "command": "drive-agent file move",
+      "summary": "Move a file or folder.",
+      "args": [
+        { "name": "from", "type": "string", "required": true },
+        { "name": "to", "type": "string", "required": true }
+      ]
+    },
+    {
+      "name": "file search",
+      "command": "drive-agent file search",
+      "summary": "Search files.",
+      "args": [{ "name": "query", "type": "string", "required": true }]
     }
   ],
   "function_wrappers": [],

@@ -6,7 +6,7 @@
   --dri-text: var(--ds-fg, #18181b);
   --dri-text-muted: var(--ds-fg-muted, #71717a);
   --dri-primary: var(--ds-accent, #3b82f6);
-  --dri-radius: 8px;
+  --dri-radius: var(--ds-radius, 8px);
   --dri-focus: 2px solid var(--dri-primary);
 }
 [data-theme="dark"] {

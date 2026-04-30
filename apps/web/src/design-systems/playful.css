@@ -1,0 +1,19 @@
+/* hofOS playful preset mapped to DriveAI's --ds-* bridge variables. */
+:root {
+  --ds-bg-canvas: #faf8ff;
+  --ds-bg-subtle: #f5f3ff;
+  --ds-border: #e9e5f5;
+  --ds-fg: #1e1b4b;
+  --ds-fg-muted: #6b7280;
+  --ds-accent: #7c3aed;
+  --ds-radius: 8px;
+}
+
+[data-theme="dark"] {
+  --ds-bg-canvas: #0f0a1a;
+  --ds-bg-subtle: #1a1425;
+  --ds-border: #2e2640;
+  --ds-fg: #ede9fe;
+  --ds-fg-muted: #a5b4fc;
+  --ds-accent: #a78bfa;
+}

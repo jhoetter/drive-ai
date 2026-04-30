@@ -12,9 +12,38 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
 import { ThemeProvider } from "next-themes";
-import { Command, FolderUp, LayoutGrid, List, Upload } from "lucide-react";
+import { BriefcaseBusiness, Command, FileText, Folder, FolderUp, Home, LayoutGrid, List, Mail, MessageCircle, Upload } from "lucide-react";
 import { create } from "zustand";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
+
+const HOF_SHELL_SIDEBAR_DEFAULT_WIDTH = 240;
+const HOF_SHELL_STORAGE_KEYS = {
+  sidebarWidth: "hof-shell-sidebar-width",
+  legacySidebarWidth: "hof-sidebar-width",
+} as const;
+
+const GLOBAL_APP_LINKS = [
+  { id: "os", label: "App", href: "http://localhost:3000/", icon: Home },
+  { id: "hofos", label: "hofOS", href: "http://localhost:3600/customers", icon: BriefcaseBusiness },
+  { id: "mailai", label: "Mail", href: "http://localhost:3010/inbox", icon: Mail },
+  { id: "collabai", label: "Chat", href: "http://localhost:8010/", icon: MessageCircle },
+  { id: "driveai", label: "Drive", href: "http://localhost:3520/drive/home", icon: Folder },
+  { id: "pagesai", label: "Pages", href: "http://localhost:3399/pages", icon: FileText },
+] as const;
+
+function readSidebarWidth(): number {
+  try {
+    const raw =
+      localStorage.getItem(HOF_SHELL_STORAGE_KEYS.sidebarWidth) ??
+      localStorage.getItem(HOF_SHELL_STORAGE_KEYS.legacySidebarWidth);
+    const value = raw ? Number(raw) : NaN;
+    return Number.isFinite(value) && value >= 140 && value <= 480
+      ? value
+      : HOF_SHELL_SIDEBAR_DEFAULT_WIDTH;
+  } catch {
+    return HOF_SHELL_SIDEBAR_DEFAULT_WIDTH;
+  }
+}
 
 type DriveView =
   | { mode: "folder"; folderId: string }
@@ -144,6 +173,7 @@ function DriveShell() {
   const staleFolderRedirectRef = useRef(false);
   const lastRouteFolderId = useRef<string | undefined>(undefined);
   const [qLocal, setQLocal] = useState("");
+  const sidebarWidth = readSidebarWidth();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -670,21 +700,48 @@ function DriveShell() {
   const shellSidebar = (
     <aside
       style={{
-        width: 220,
+        width: sidebarWidth,
         flexShrink: 0,
         borderRight: "1px solid var(--dri-border)",
         padding: 12,
         display: "flex",
         flexDirection: "column",
-        gap: 4,
+        overflow: "hidden",
         background: "var(--dri-surface-0)",
       }}
     >
-      <div style={{ marginBottom: 8 }}>
-        <Link to="/drive/home" style={{ textDecoration: "none", color: "var(--dri-text)" }}>
-          <span style={{ fontSize: 18, fontWeight: 700 }}>{t("appTitle")}</span>
+      <div style={{ borderBottom: "1px solid var(--dri-border)", margin: "-12px -12px 8px", padding: 12 }}>
+        <Link
+          to="/drive/home"
+          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "var(--dri-text)" }}
+        >
+          <Folder size={16} aria-hidden />
+          <span style={{ fontSize: 15, fontWeight: 700 }}>Drive</span>
         </Link>
+        <button
+          type="button"
+          onClick={() => set({ open: true, query: "" })}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 6,
+            border: "1px solid var(--dri-border)",
+            borderRadius: 8,
+            padding: "8px 10px",
+            background: "var(--dri-surface-1)",
+            color: "var(--dri-text-muted)",
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+        >
+          <span>Actions</span>
+          <span style={{ fontSize: 10 }}>⌘K</span>
+        </button>
       </div>
+      <div style={{ minHeight: 0, flex: 1, overflowY: "auto" }}>
       <nav aria-label="Drive" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <DriveNavItem to="/drive/home" active={isNavHome}>
           {t("home")}
@@ -763,6 +820,72 @@ function DriveShell() {
           </button>
         </div>
       )}
+      </div>
+      <nav
+        aria-label="Apps"
+        style={{
+          borderTop: "1px solid var(--dri-border)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          margin: "8px -12px 0",
+          padding: "8px 12px",
+        }}
+      >
+        <p style={{ margin: "4px 0", color: "var(--dri-text-muted)", fontSize: 11, textTransform: "uppercase" }}>Apps</p>
+        {GLOBAL_APP_LINKS.map((app) => {
+          const Icon = app.icon;
+          return (
+            <a
+              key={app.id}
+              href={app.href}
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: 8,
+                textDecoration: "none",
+                color: app.id === "driveai" ? "var(--dri-text)" : "var(--dri-text-muted)",
+                background: app.id === "driveai" ? "var(--dri-surface-1)" : "transparent",
+                borderRadius: 8,
+                padding: "6px 8px",
+                fontSize: 14,
+              }}
+            >
+              <Icon size={14} aria-hidden />
+              <span>{app.label}</span>
+            </a>
+          );
+        })}
+      </nav>
+      <div
+        style={{
+          borderTop: "1px solid var(--dri-border)",
+          margin: "0 -12px -12px",
+          padding: "8px 12px 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          color: "var(--dri-text-muted)",
+          fontSize: 13,
+        }}
+      >
+        <span
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 999,
+            background: "var(--dri-text)",
+            color: "var(--dri-surface-0)",
+            display: "grid",
+            placeItems: "center",
+            fontWeight: 700,
+            fontSize: 11,
+          }}
+        >
+          DR
+        </span>
+        <span>Drive user</span>
+      </div>
     </aside>
   );
 
@@ -866,6 +989,20 @@ function DriveShell() {
                     {t("recent")}
                   </button>
                 </li>
+                {GLOBAL_APP_LINKS.map((app) => (
+                  <li key={app.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = app.href;
+                        set({ open: false });
+                      }}
+                      style={paletteRowBtn}
+                    >
+                      Open {app.label}
+                    </button>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
@@ -1275,6 +1412,20 @@ function DriveShell() {
                   {t("recent")}
                 </button>
               </li>
+              {GLOBAL_APP_LINKS.map((app) => (
+                <li key={app.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href = app.href;
+                      set({ open: false });
+                    }}
+                    style={paletteRowBtn}
+                  >
+                    Open {app.label}
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
