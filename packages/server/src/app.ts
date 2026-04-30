@@ -28,6 +28,8 @@ import { handleCommand } from "./services/command-dispatch.js";
 import { buildMcpResponse } from "./mcp/mcp-server.js";
 import { initUpload, completeUpload, abandonUpload } from "./services/upload.js";
 import { runDriveSearch } from "./services/drive-search.js";
+import { registerSsoMiddleware } from "./middleware/sso.js";
+import { registerStaticWeb } from "./static-web.js";
 
 function mapItem(row: typeof items.$inferSelect) {
   return {
@@ -55,6 +57,7 @@ export async function buildApp(deps: AppDeps) {
   const app = Fastify({ logger: true });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(websocket);
+  registerSsoMiddleware(app);
 
   app.addHook("preHandler", async (req) => {
     if (req.url === "/api/health" || req.url === "/api/ws-ping") {
@@ -345,6 +348,8 @@ export async function buildApp(deps: AppDeps) {
       deps.events.add(sock, i.tenantId, i.userId);
     },
   );
+
+  await registerStaticWeb(app);
 
   return app;
 }

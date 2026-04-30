@@ -52,6 +52,18 @@ function extractToken(headers: Record<string, unknown>): string | null {
   return m && m[1] ? m[1].trim() : null;
 }
 
+function extractSessionCookie(headers: Record<string, unknown>): string | null {
+  const raw = headers["cookie"] ?? headers["Cookie"];
+  if (typeof raw !== "string") return null;
+  for (const part of raw.split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === "hof_subapp_session") {
+      return decodeURIComponent(value.join("="));
+    }
+  }
+  return null;
+}
+
 export interface HofJwtIdentityOptions {
   readonly fallback: ResolvedIdentity;
   readonly expectedAudience?: string;
@@ -72,11 +84,12 @@ function claimsToIdentity(claims: JwtClaims, fallback: ResolvedIdentity): Resolv
 
 export function buildHofJwtIdentity(opts: HofJwtIdentityOptions) {
   const secretEnv = (process.env["HOF_SUBAPP_JWT_SECRET"] ?? "").trim();
+  const previousSecretEnv = (process.env["HOF_SUBAPP_JWT_SECRET_PREVIOUS"] ?? "").trim();
   const audience = opts.expectedAudience ?? "driveai";
 
   return async (req: { headers: Record<string, unknown> }): Promise<ResolvedIdentity> => {
     if (!secretEnv) {
-      const token = extractToken(req.headers);
+      const token = extractToken(req.headers) ?? extractSessionCookie(req.headers);
       if (token) {
         try {
           const claims = verify(token, Buffer.from(DEV_FALLBACK_SECRET, "utf-8"));
@@ -89,15 +102,26 @@ export function buildHofJwtIdentity(opts: HofJwtIdentityOptions) {
       }
       return opts.fallback;
     }
-    const token = extractToken(req.headers);
+    const token = extractToken(req.headers) ?? extractSessionCookie(req.headers);
     if (!token) {
       const err = new Error("missing bearer token");
       (err as Error & { statusCode?: number }).statusCode = 401;
       throw err;
     }
-    let claims: JwtClaims;
+    let claims: JwtClaims | null = null;
     try {
-      claims = verify(token, Buffer.from(secretEnv, "utf-8"));
+      const secrets = [secretEnv, previousSecretEnv].filter(Boolean);
+      let lastError: unknown;
+      for (const secret of secrets) {
+        try {
+          claims = verify(token, Buffer.from(secret, "utf-8"));
+          lastError = undefined;
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      if (lastError || !claims) throw lastError ?? new Error("token verification failed");
     } catch (cause) {
       const err = new Error(
         `invalid bearer token: ${cause instanceof Error ? cause.message : String(cause)}`,
