@@ -1,0 +1,62 @@
+{
+  "$schema": "https://hofos.dev/schemas/hof-module-v1.json",
+  "name": "driveai",
+  "displayName": "DriveAI",
+  "version": "0.1.0",
+  "contract_version": "1.0.0",
+  "description": "Standalone DriveAI subapp stub for hofOS cells.",
+  "sidecars": [
+    {
+      "name": "driveai",
+      "image": "ghcr.io/jhoetter/drive-ai:0.1.0",
+      "ports": [
+        {
+          "container": 3520,
+          "public": 4003
+        }
+      ],
+      "auth": {
+        "mode": "inherit"
+      },
+      "healthcheck": {
+        "path": "/health"
+      }
+    }
+  ],
+  "data": {
+    "schema_name": "driveai",
+    "s3_prefix": "tenants/${tenant}/drive/",
+    "redis_prefix": "driveai:"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "label": "DriveAI",
+        "icon": "folder",
+        "entries": [
+          {
+            "label": "Files",
+            "href": "/files"
+          },
+          {
+            "label": "Shared",
+            "href": "/shared"
+          }
+        ]
+      }
+    ]
+  },
+  "design": {
+    "consume": true
+  },
+  "agent": {
+    "subagent": {
+      "enabled": false,
+      "system_prompt_path": "agent/system-prompt.md",
+      "tool_allowlist": [
+        "drive-agent status"
+      ],
+      "canvas_route": "/agent-sessions/driveai/<session_id>"
+    }
+  }
+}

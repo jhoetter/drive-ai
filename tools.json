@@ -1,0 +1,15 @@
+{
+  "$schema": "https://hofos.dev/schemas/tools-v1.json",
+  "subapp": "driveai",
+  "contract_version": "1.0.0",
+  "cli_verbs": [
+    {
+      "name": "status",
+      "command": "drive-agent status",
+      "summary": "Return DriveAI status.",
+      "args": []
+    }
+  ],
+  "function_wrappers": [],
+  "subagent": null
+}
