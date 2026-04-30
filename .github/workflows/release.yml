@@ -82,7 +82,7 @@ jobs:
           test -f "packages/hofos-ui/dist/index.js" || (echo "missing packages/hofos-ui/dist/index.js" && exit 1)
           npm --prefix packages/hofos-ui version --no-git-tag-version --allow-same-version "${VERSION}"
           pnpm --dir packages/hofos-ui pack --pack-destination .
-          mv driveai-hofos-ui-*.tgz "driveai-ui-${VERSION}.tgz"
+          mv packages/hofos-ui/driveai-hofos-ui-*.tgz "driveai-ui-${VERSION}.tgz"
           ls -lh "driveai-ui-${VERSION}.tgz"
 
       - name: Publish GitHub Release
