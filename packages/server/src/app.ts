@@ -71,7 +71,12 @@ export async function buildApp(deps: AppDeps) {
 
   app.get("/api/me", async (req) => {
     const i = ident(req);
-    return { userId: i.userId, tenantId: i.tenantId, email: i.email ?? null };
+    return {
+      userId: i.userId,
+      tenantId: i.tenantId,
+      email: i.email ?? null,
+      displayName: i.displayName ?? i.email ?? i.userId,
+    };
   });
 
   app.get("/api/drives", async (req) => {

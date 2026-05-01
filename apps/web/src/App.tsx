@@ -12,7 +12,13 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
 import { ThemeProvider } from "next-themes";
-import { HofShellLayout, HOF_SHELL_APP_LINKS, type HofShellNavGroup } from "@hofos/shell-ui";
+import {
+  HofShellLayout,
+  HOF_SHELL_APP_LINKS,
+  fetchHofShellUser,
+  type HofShellNavGroup,
+  type HofShellUser,
+} from "@hofos/shell-ui";
 import { BriefcaseBusiness, Command, FileText, Folder, FolderUp, Home, LayoutGrid, List, Mail, MessageCircle, Upload } from "lucide-react";
 import { create } from "zustand";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
@@ -156,6 +162,7 @@ function DriveShell() {
   const [qLocal, setQLocal] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [shellUser, setShellUser] = useState<HofShellUser | null>(null);
 
   const viewMode = driveView(pathname, rootId, fileId);
 
@@ -164,6 +171,16 @@ function DriveShell() {
       setQLocal(spQ);
     }
   }, [viewMode.mode, spQ]);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchHofShellUser({ endpoint: "/api/me", fallbackName: "Drive" }).then((user) => {
+      if (alive) setShellUser(user);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const drivesQ = useQuery({ queryKey: ["drives"], queryFn: driveApi.drives });
   const root = drivesQ.data?.drives[0];
@@ -725,7 +742,7 @@ function DriveShell() {
       appLinks={HOF_SHELL_APP_LINKS.map((link) =>
         link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
       )}
-      user={{ name: "Drive user", initials: "DR" }}
+      user={shellUser}
       onCommand={() => set({ open: true, query: "" })}
       onNavigate={(path) => {
         if (path.startsWith("/")) nav(path);
