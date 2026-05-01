@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useTranslation } from "react-i18next";
 import {
   Link,
+  Navigate,
   Route,
   Routes,
   useNavigate,
@@ -86,6 +87,37 @@ function useKeyboardPalette() {
   }, [set]);
 }
 
+const OFFICE_FILE_EXTENSIONS = new Set(["docx", "xlsx", "pptx", "pdf"]);
+
+function positiveIntParam(value: string | null, fallback: number): number {
+  const n = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function hofOsBaseUrl(): string {
+  const env = (import.meta as unknown as {
+    env?: { VITE_HOF_OS_PUBLIC_URL?: string; HOF_OS_PUBLIC_URL?: string };
+  }).env;
+  const configured = (env?.VITE_HOF_OS_PUBLIC_URL || env?.HOF_OS_PUBLIC_URL || "").replace(/\/$/, "");
+  if (configured) return configured;
+  if (window.location.hostname === "localhost") return "http://localhost:3000";
+  return `${window.location.protocol}//app.${window.location.hostname.replace(/^drive\./, "")}`;
+}
+
+function isOfficeEditable(item: DriveItem): boolean {
+  if (item.type !== "file" || !item.s3Key) return false;
+  const ext = item.name.split(".").pop()?.toLowerCase();
+  return Boolean(ext && OFFICE_FILE_EXTENSIONS.has(ext));
+}
+
+function openOfficeEditor(item: DriveItem): void {
+  if (!item.s3Key) return;
+  const url = new URL("/edit-asset", hofOsBaseUrl());
+  url.searchParams.set("key", item.s3Key);
+  url.searchParams.set("from", window.location.href);
+  window.location.href = url.toString();
+}
+
 function FileDetailPane(props: { fileId: string; onBack: () => void }) {
   const { t } = useTranslation("trans");
   const itemQ = useQuery({
@@ -120,25 +152,43 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
     );
   }
   const it = itemQ.data!.item;
+  const canOpenInOffice = isOfficeEditable(it);
   return (
     <div>
       <p style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{it.name}</p>
       <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginBottom: 8 }}>
         {it.type} {it.size != null ? ` · ${it.size} B` : ""}
       </p>
-      <button
-        type="button"
-        onClick={() => void onDownload()}
-        style={{
-          borderRadius: 8,
-          border: "1px solid var(--dri-border)",
-          padding: "8px 14px",
-          background: "var(--dri-surface-1)",
-          cursor: "pointer",
-        }}
-      >
-        {t("downloadFile")}
-      </button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {canOpenInOffice && (
+          <button
+            type="button"
+            onClick={() => openOfficeEditor(it)}
+            style={{
+              borderRadius: 8,
+              border: "1px solid var(--dri-border)",
+              padding: "8px 14px",
+              background: "var(--dri-surface-1)",
+              cursor: "pointer",
+            }}
+          >
+            {t("openInOffice")}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void onDownload()}
+          style={{
+            borderRadius: 8,
+            border: "1px solid var(--dri-border)",
+            padding: "8px 14px",
+            background: "var(--dri-surface-1)",
+            cursor: "pointer",
+          }}
+        >
+          {t("downloadFile")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -151,6 +201,9 @@ function DriveShell() {
   const [searchParams, setSearchParams] = useSearchParams();
   const preview = searchParams.get("preview");
   const spQ = searchParams.get("q") || "";
+  const drivePage = positiveIntParam(searchParams.get("drive_page"), 1);
+  const driveLimit = positiveIntParam(searchParams.get("drive_limit"), 25);
+  const folderType = searchParams.get("type");
   const qc = useQueryClient();
   const [view, setView] = useState<"list" | "grid">("list");
   const { open, query, set } = usePalette();
@@ -188,26 +241,32 @@ function DriveShell() {
   const effectiveFolderId: string | undefined =
     viewMode.mode === "folder"
       ? viewMode.folderId
-      : viewMode.mode === "myDriveDefault"
+      : viewMode.mode === "myDriveDefault" || viewMode.mode === "home"
         ? root?.rootFolderId ?? undefined
         : undefined;
 
-  const inFolder = viewMode.mode === "folder" || viewMode.mode === "myDriveDefault";
+  const inFolder =
+    viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home";
 
   const childrenQ = useQuery({
-    queryKey: ["children", effectiveFolderId],
-    queryFn: () => driveApi.children(effectiveFolderId!),
+    queryKey: ["children", effectiveFolderId, drivePage, driveLimit, folderType],
+    queryFn: () =>
+      driveApi.children(effectiveFolderId!, {
+        page: drivePage,
+        limit: driveLimit,
+        type: folderType,
+      }),
     enabled: inFolder && Boolean(effectiveFolderId),
   });
   const recentQ = useQuery({
     queryKey: ["recent"],
     queryFn: driveApi.recent,
-    enabled: viewMode.mode === "recent" || viewMode.mode === "home",
+    enabled: viewMode.mode === "recent",
   });
   const starredQ = useQuery({
     queryKey: ["starred"],
     queryFn: driveApi.starred,
-    enabled: viewMode.mode === "starred" || viewMode.mode === "home",
+    enabled: viewMode.mode === "starred",
   });
   const trashQ = useQuery({
     queryKey: ["trash"],
@@ -338,6 +397,10 @@ function DriveShell() {
     if (!r.id) return;
     if (r.type === "folder") {
       void nav(`/drive/f/${r.id}`);
+      return;
+    }
+    if (isOfficeEditable(r)) {
+      openOfficeEditor(r);
       return;
     }
     void nav(`/drive/file/${r.id}`);
@@ -511,7 +574,7 @@ function DriveShell() {
   }
 
   const rows: DriveItem[] = (() => {
-    if (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault") {
+    if (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home") {
       return (childrenQ.data?.items ?? []).map((x) => x.item);
     }
     if (viewMode.mode === "recent") {
@@ -545,17 +608,11 @@ function DriveShell() {
         locationPath: r.locationPath ?? null,
       }));
     }
-    if (viewMode.mode === "home") {
-      return [];
-    }
     return [];
   })();
 
   const listLoading = (() => {
-    if (viewMode.mode === "home") {
-      return recentQ.isLoading || starredQ.isLoading;
-    }
-    if (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault") {
+    if (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home") {
       return childrenQ.isLoading && !childrenQ.isError;
     }
     if (viewMode.mode === "recent") return recentQ.isLoading;
@@ -680,7 +737,7 @@ function DriveShell() {
         <Command size={16} aria-hidden />
         {t("openPalette")}
       </button>
-      {viewMode.mode !== "home" && viewMode.mode !== "file" && (
+      {viewMode.mode !== "file" && (
         <div style={{ display: "flex", border: "1px solid var(--dri-border)", borderRadius: 6, flexShrink: 0 }}>
           <button type="button" onClick={() => setView("list")} style={{ background: "transparent", border: "none" }} aria-pressed={view === "list"}>
             <List size={16} />
@@ -987,6 +1044,42 @@ function DriveShell() {
           </button>
         </div>
       )}
+      {inFolder && (
+        <div
+          style={{
+            padding: "8px 16px",
+            borderBottom: "1px solid var(--dri-border)",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>{t("typeFilter")}</span>
+          {[
+            { value: "", label: t("filterAll") },
+            { value: "folder", label: t("filterFolders") },
+            { value: "file", label: t("filterFiles") },
+          ].map((chip) => (
+            <button
+              key={chip.value || "all"}
+              type="button"
+              style={{
+                ...chipStyle,
+                fontWeight: (folderType ?? "") === chip.value ? 600 : 400,
+              }}
+              onClick={() =>
+                mergeSearch({
+                  type: chip.value || null,
+                  drive_page: "1",
+                })
+              }
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
       <main
         id="main-content"
         style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}
@@ -1052,68 +1145,6 @@ function DriveShell() {
           </div>
         )}
         {listLoading && <DriveListSkeleton />}
-        {viewMode.mode === "home" && !listLoading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            <section aria-labelledby="sec-recent">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  marginBottom: 8,
-                }}
-              >
-                <h2 id="sec-recent" style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t("recent")}
-                </h2>
-                <Link
-                  to="/drive/recent"
-                  style={{ fontSize: 13, color: "var(--dri-primary)", textDecoration: "none" }}
-                >
-                  {t("viewAll")}
-                </Link>
-              </div>
-              {(recentQ.data?.items ?? []).length === 0 ? (
-                <p style={{ color: "var(--dri-text-muted)", fontSize: 14 }}>{t("emptyList")}</p>
-              ) : (
-                <DriveListView
-                  columnHeaders={{ name: t("columnName"), type: t("columnType") }}
-                  rows={(recentQ.data?.items ?? []).map((x) => x.item)}
-                  onRowOpen={openItem}
-                />
-              )}
-            </section>
-            <section aria-labelledby="sec-starred">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  marginBottom: 8,
-                }}
-              >
-                <h2 id="sec-starred" style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t("starred")}
-                </h2>
-                <Link
-                  to="/drive/starred"
-                  style={{ fontSize: 13, color: "var(--dri-primary)", textDecoration: "none" }}
-                >
-                  {t("viewAll")}
-                </Link>
-              </div>
-              {(starredQ.data?.items ?? []).length === 0 ? (
-                <p style={{ color: "var(--dri-text-muted)", fontSize: 14 }}>{t("emptyList")}</p>
-              ) : (
-                <DriveListView
-                  columnHeaders={{ name: t("columnName"), type: t("columnType") }}
-                  rows={(starredQ.data?.items ?? []).map((x) => x.item)}
-                  onRowOpen={openItem}
-                />
-              )}
-            </section>
-          </div>
-        )}
         {!listLoading && rows.length === 0 && viewMode.mode === "search" && !hasSearchCriteria && (
           <p style={{ color: "var(--dri-text-muted)" }}>{t("typeQueryToSearch")}</p>
         )}
@@ -1122,7 +1153,7 @@ function DriveShell() {
         )}
         {!listLoading &&
           rows.length === 0 &&
-          (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault") &&
+          (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home") &&
           !childrenQ.isError && (
           <div>
             <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyFolder")}</p>
@@ -1134,11 +1165,10 @@ function DriveShell() {
         {!listLoading &&
           rows.length === 0 &&
           viewMode.mode !== "search" &&
-          !inFolder &&
-          viewMode.mode !== "home" && (
+          !inFolder && (
             <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyList")}</p>
           )}
-        {viewMode.mode !== "home" && view === "list" && rows.length > 0 && (
+        {viewMode.mode !== "file" && view === "list" && rows.length > 0 && (
           <DriveListView
             columnHeaders={{ name: t("columnName"), type: t("columnType") }}
             rows={rows}
@@ -1159,7 +1189,7 @@ function DriveShell() {
             </button>
           </div>
         )}
-        {viewMode.mode !== "home" && view === "grid" && rows.length > 0 && (
+        {viewMode.mode !== "file" && view === "grid" && rows.length > 0 && (
           <div
             style={{
               display: "grid",
@@ -1194,6 +1224,68 @@ function DriveShell() {
                 ) : null}
               </div>
             ))}
+          </div>
+        )}
+        {inFolder && childrenQ.data && childrenQ.data.total > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginTop: 16,
+              color: "var(--dri-text-muted)",
+              fontSize: 13,
+            }}
+          >
+            <span>
+              {t("paginationSummary", {
+                start: (childrenQ.data.page - 1) * childrenQ.data.limit + 1,
+                end: Math.min(childrenQ.data.page * childrenQ.data.limit, childrenQ.data.total),
+                total: childrenQ.data.total,
+              })}
+            </span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select
+                value={String(driveLimit)}
+                onChange={(e) =>
+                  mergeSearch({
+                    drive_limit: e.currentTarget.value,
+                    drive_page: "1",
+                  })
+                }
+                style={{
+                  border: "1px solid var(--dri-border)",
+                  borderRadius: 6,
+                  padding: "6px 8px",
+                  background: "var(--dri-surface-0)",
+                  color: "var(--dri-text)",
+                }}
+                aria-label={t("itemsPerPage")}
+              >
+                {[25, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={childrenQ.data.page <= 1}
+                onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page - 1) })}
+                style={{ ...chipStyle, borderRadius: 8, opacity: childrenQ.data.page <= 1 ? 0.5 : 1 }}
+              >
+                {t("previousPage")}
+              </button>
+              <button
+                type="button"
+                disabled={!childrenQ.data.hasMore}
+                onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page + 1) })}
+                style={{ ...chipStyle, borderRadius: 8, opacity: childrenQ.data.hasMore ? 1 : 0.5 }}
+              >
+                {t("nextPage")}
+              </button>
+            </div>
           </div>
         )}
         </div>
@@ -1301,14 +1393,7 @@ export function App() {
   return (
     <ThemeProvider attribute="data-theme" storageKey="hof-color-scheme" defaultTheme="system" enableSystem>
       <Routes>
-        <Route
-          path="/"
-          element={
-            <div style={{ padding: 24 }}>
-              <Link to="/drive/home">Drive</Link>
-            </div>
-          }
-        />
+        <Route path="/" element={<Navigate to="/drive/home" replace />} />
         <Route path="/drive" element={<DriveShell />} />
         <Route path="/drive/home" element={<DriveShell />} />
         <Route path="/drive/my-drive" element={<MyDriveRedirect />} />

@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   activityEvents,
   changeLog,
@@ -31,7 +31,7 @@ import { runDriveSearch } from "./services/drive-search.js";
 import { registerSsoMiddleware } from "./middleware/sso.js";
 import { registerStaticWeb } from "./static-web.js";
 
-function mapItem(row: typeof items.$inferSelect) {
+function mapItem(row: typeof items.$inferSelect, s3Key?: string | null) {
   return {
     id: row.id,
     driveId: row.driveId,
@@ -42,7 +42,27 @@ function mapItem(row: typeof items.$inferSelect) {
     size: row.size,
     trashedAt: row.trashedAt,
     createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    s3Key: s3Key ?? null,
   };
+}
+
+async function latestBlobKeys(db: Db, itemIds: string[]): Promise<Map<string, string>> {
+  if (itemIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      itemId: fileBlobs.itemId,
+      s3Key: fileBlobs.s3Key,
+      version: fileBlobs.version,
+    })
+    .from(fileBlobs)
+    .where(inArray(fileBlobs.itemId, itemIds))
+    .orderBy(desc(fileBlobs.version));
+  const keys = new Map<string, string>();
+  for (const row of rows) {
+    if (!keys.has(row.itemId)) keys.set(row.itemId, row.s3Key);
+  }
+  return keys;
 }
 
 function ident(
@@ -166,14 +186,16 @@ export async function buildApp(deps: AppDeps) {
     }
     const [row] = await db.select().from(items).where(eq(items.id, req.params.id));
     if (!row) return reply.status(404).send({ error: { code: "not_found" } });
+    const keys = await latestBlobKeys(db, row.type === "file" ? [row.id] : []);
     return {
-      item: mapItem(row),
+      item: mapItem(row, keys.get(row.id)),
       capabilities: capabilitiesFromRole(res.role, { isOwner: res.driveOwnerId === i.userId }),
     };
   });
 
   app.get<{
     Params: { id: string };
+    Querystring: { page?: string; limit?: string; type?: string };
   }>("/api/items/:id/children", async (req) => {
     const i = ident(req);
     const parentId = req.params.id;
@@ -182,16 +204,40 @@ export async function buildApp(deps: AppDeps) {
     if (!capabilitiesFromRole(r.role, { isOwner: r.driveOwnerId === i.userId }).canView) {
       throw new DriveAiError("forbidden", "forbidden", ExitCode.PermissionDenied);
     }
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(String(req.query.limit ?? "25"), 10) || 25),
+    );
+    const offset = (page - 1) * limit;
+    const type = String(req.query.type ?? "");
+    const filter = and(
+      eq(items.parentId, parentId),
+      isNull(items.trashedAt),
+      type === "file" || type === "folder" ? eq(items.type, type) : undefined,
+    )!;
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(items)
+      .where(filter);
     const rows = await db
       .select()
       .from(items)
-      .where(
-        and(
-          eq(items.parentId, parentId),
-          isNull(items.trashedAt),
-        )!,
-      );
-    return { items: rows.map((it) => ({ item: mapItem(it) })) };
+      .where(filter)
+      .orderBy(sql`case when ${items.type} = 'folder' then 0 else 1 end`, items.name)
+      .limit(limit)
+      .offset(offset);
+    const keys = await latestBlobKeys(
+      db,
+      rows.filter((it) => it.type === "file").map((it) => it.id),
+    );
+    return {
+      items: rows.map((it) => ({ item: mapItem(it, keys.get(it.id)) })),
+      page,
+      limit,
+      total: Number(total),
+      hasMore: offset + rows.length < Number(total),
+    };
   });
 
   app.post("/api/commands", async (req, reply) => {

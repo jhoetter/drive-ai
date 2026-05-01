@@ -4,7 +4,7 @@ import { Suspense, type ReactNode } from "react";
 
 const en = {
   appTitle: "Drive",
-  home: "Home",
+  home: "Files",
   viewAll: "View all",
   columnName: "Name",
   columnType: "Type",
@@ -47,10 +47,19 @@ const en = {
   searchInFolder: "Search this folder",
   searchChipImage: "Images",
   searchChipDocs: "Documents",
+  typeFilter: "Type",
+  filterAll: "All",
+  filterFolders: "Folders",
+  filterFiles: "Files",
+  openInOffice: "Open in Office",
+  itemsPerPage: "Items per page",
+  previousPage: "Previous",
+  nextPage: "Next",
+  paginationSummary: "{{start}}-{{end}} of {{total}}",
 } as const;
 const de: Record<keyof typeof en, string> = {
   appTitle: "Drive",
-  home: "Startseite",
+  home: "Dateien",
   viewAll: "Alle anzeigen",
   columnName: "Name",
   columnType: "Typ",
@@ -94,6 +103,15 @@ const de: Record<keyof typeof en, string> = {
   searchInFolder: "Diesen Ordner durchsuchen",
   searchChipImage: "Bilder",
   searchChipDocs: "Dokumente",
+  typeFilter: "Typ",
+  filterAll: "Alle",
+  filterFolders: "Ordner",
+  filterFiles: "Dateien",
+  openInOffice: "In Office öffnen",
+  itemsPerPage: "Einträge pro Seite",
+  previousPage: "Zurück",
+  nextPage: "Weiter",
+  paginationSummary: "{{start}}-{{end}} von {{total}}",
 };
 
 const i18n = createInstance();

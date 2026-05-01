@@ -13,7 +13,11 @@
       "name": "file list",
       "command": "drive-agent file list",
       "summary": "List files in a folder.",
-      "args": [{ "name": "folder", "type": "string", "required": false }]
+      "args": [
+        { "name": "folder", "type": "string", "required": false },
+        { "name": "page", "type": "integer", "required": false },
+        { "name": "limit", "type": "integer", "required": false }
+      ]
     },
     {
       "name": "file upload",
@@ -27,8 +31,11 @@
     {
       "name": "file download",
       "command": "drive-agent file download",
-      "summary": "Download a file by key.",
-      "args": [{ "name": "key", "type": "string", "required": true }]
+      "summary": "Download a file by id or Drive path.",
+      "args": [
+        { "name": "key", "type": "string", "required": true },
+        { "name": "output", "type": "string", "required": false }
+      ]
     },
     {
       "name": "folder create",
@@ -49,7 +56,10 @@
       "name": "file search",
       "command": "drive-agent file search",
       "summary": "Search files.",
-      "args": [{ "name": "query", "type": "string", "required": true }]
+      "args": [
+        { "name": "query", "type": "string", "required": true },
+        { "name": "limit", "type": "integer", "required": false }
+      ]
     }
   ],
   "function_wrappers": [],

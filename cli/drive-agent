@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import mimetypes
+import os
+from pathlib import Path
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 
 VERSION = "0.1.0"
@@ -27,6 +34,164 @@ def emit(ok: bool, result: dict, error: str | None = None) -> int:
     return 0 if ok else 1
 
 
+def api_base() -> str:
+    return os.environ.get("DRIVEAI_API_URL", "http://localhost:3520").rstrip("/")
+
+
+def auth_headers() -> dict[str, str]:
+    token = os.environ.get("DRIVEAI_API_TOKEN") or os.environ.get("HOFOS_API_TOKEN")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def request_json(
+    method: str,
+    path: str,
+    body: dict | None = None,
+) -> dict:
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    url = f"{api_base()}{path}"
+    headers = {"Accept": "application/json", **auth_headers()}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"{exc.code} {detail}") from exc
+    return json.loads(raw) if raw else {}
+
+
+def put_bytes(url: str, data: bytes, content_type: str) -> None:
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="PUT",
+        headers={"Content-Type": content_type},
+    )
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        if resp.status >= 400:
+            raise RuntimeError(f"upload failed: {resp.status}")
+
+
+def command(name: str, payload: dict) -> dict:
+    res = request_json("POST", "/api/commands", {"name": name, "payload": payload})
+    if not res.get("ok", False):
+        raise RuntimeError(str(res.get("error") or "command failed"))
+    return dict(res.get("result") or {})
+
+
+def root_folder_id() -> str:
+    drives = request_json("GET", "/api/drives").get("drives") or []
+    if not drives or not drives[0].get("rootFolderId"):
+        raise RuntimeError("Drive root folder is not configured")
+    return str(drives[0]["rootFolderId"])
+
+
+def children(parent_id: str, *, page: int = 1, limit: int = 100) -> dict:
+    q = urllib.parse.urlencode({"page": page, "limit": limit})
+    return request_json("GET", f"/api/items/{urllib.parse.quote(parent_id)}/children?{q}")
+
+
+def resolve_path(path: str, *, want_folder: bool = False) -> str:
+    value = path.strip()
+    if value in {"", "/", "root"}:
+        return root_folder_id()
+    if not value.startswith("/"):
+        return value
+
+    current = root_folder_id()
+    parts = [p for p in value.split("/") if p]
+    for index, part in enumerate(parts):
+        listing = children(current)
+        match = next(
+            (
+                row["item"]
+                for row in listing.get("items", [])
+                if row.get("name") == part
+            ),
+            None,
+        )
+        if not match:
+            raise RuntimeError(f"path segment not found: {part}")
+        is_last = index == len(parts) - 1
+        if not is_last and match.get("type") != "folder":
+            raise RuntimeError(f"path segment is not a folder: {part}")
+        if is_last and want_folder and match.get("type") != "folder":
+            raise RuntimeError(f"path is not a folder: {path}")
+        current = str(match["id"])
+    return current
+
+
+def list_files(folder: str, page: int, limit: int) -> dict:
+    folder_id = resolve_path(folder, want_folder=True)
+    return children(folder_id, page=page, limit=limit)
+
+
+def upload_file(path: str, to_folder: str) -> dict:
+    file_path = Path(path)
+    data = file_path.read_bytes()
+    content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    parent_id = resolve_path(to_folder, want_folder=True)
+    init = request_json(
+        "POST",
+        "/api/uploads",
+        {
+            "parentId": parent_id,
+            "name": file_path.name,
+            "contentType": content_type,
+            "size": len(data),
+        },
+    )
+    try:
+        put_bytes(str(init["uploadUrl"]), data, content_type)
+        digest = hashlib.sha256(data).hexdigest()
+        request_json(
+            "POST",
+            "/api/uploads/complete",
+            {
+                "fileId": init["fileId"],
+                "sha256": digest,
+                "size": len(data),
+                "contentType": content_type,
+            },
+        )
+    except Exception:
+        request_json("POST", "/api/uploads/abandon", {"fileId": init["fileId"]})
+        raise
+    return {"fileId": init["fileId"], "name": file_path.name, "size": len(data)}
+
+
+def download_file(key: str, output: str | None) -> dict:
+    file_id = resolve_path(key)
+    res = request_json("GET", f"/api/items/{urllib.parse.quote(file_id)}/download")
+    target = Path(output or res["name"])
+    with urllib.request.urlopen(str(res["url"]), timeout=300) as resp:
+        target.write_bytes(resp.read())
+    return {"fileId": file_id, "path": str(target), "contentType": res.get("contentType")}
+
+
+def move_item(source: str, target_folder: str) -> dict:
+    item_id = resolve_path(source)
+    parent_id = resolve_path(target_folder, want_folder=True)
+    return command("item:move", {"id": item_id, "parentId": parent_id})
+
+
+def search_files(query: str, limit: int) -> dict:
+    q = urllib.parse.urlencode({"q": query, "limit": limit})
+    return request_json("GET", f"/api/search?{q}")
+
+
+def create_folder(path: str) -> dict:
+    clean = [p for p in path.split("/") if p]
+    if not clean:
+        raise RuntimeError("folder path is required")
+    parent = "/" if path.startswith("/") else "/"
+    parent_id = resolve_path(parent, want_folder=True)
+    return command("folder:ensurePath", {"parentId": parent_id, "segments": clean})
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="drive-agent")
     parser.add_argument("--version", action="store_true")
@@ -34,15 +199,22 @@ def main() -> int:
     sub.add_parser("status")
     file_cmd = sub.add_parser("file")
     file_sub = file_cmd.add_subparsers(dest="action")
-    file_sub.add_parser("list").add_argument("--folder", default="/")
+    list_parser = file_sub.add_parser("list")
+    list_parser.add_argument("--folder", default="/")
+    list_parser.add_argument("--page", type=int, default=1)
+    list_parser.add_argument("--limit", type=int, default=25)
     upload = file_sub.add_parser("upload")
     upload.add_argument("--path", required=True)
     upload.add_argument("--to", default="/")
-    file_sub.add_parser("download").add_argument("--key", required=True)
+    download = file_sub.add_parser("download")
+    download.add_argument("--key", required=True)
+    download.add_argument("--output")
     move = file_sub.add_parser("move")
     move.add_argument("--from", dest="source", required=True)
     move.add_argument("--to", required=True)
-    file_sub.add_parser("search").add_argument("--query", required=True)
+    search = file_sub.add_parser("search")
+    search.add_argument("--query", required=True)
+    search.add_argument("--limit", type=int, default=25)
     folder = sub.add_parser("folder")
     folder_sub = folder.add_subparsers(dest="action")
     folder_sub.add_parser("create").add_argument("--path", required=True)
@@ -51,11 +223,26 @@ def main() -> int:
     if args.version:
         return emit(True, {"version": VERSION})
     if args.group == "status":
-        return emit(True, {"module": "driveai", "status": "ready"})
-    payload = {"module": "driveai", "group": args.group, "action": getattr(args, "action", None)}
-    payload.update({k: v for k, v in vars(args).items() if k not in {"group", "action", "version"}})
-    if args.group in {"file", "folder"} and args.action:
-        return emit(True, payload)
+        try:
+            me = request_json("GET", "/api/me")
+            return emit(True, {"module": "driveai", "status": "ready", "api": api_base(), "me": me})
+        except Exception as exc:
+            return emit(False, {}, str(exc))
+    try:
+        if args.group == "file" and args.action == "list":
+            return emit(True, list_files(args.folder, args.page, args.limit))
+        if args.group == "file" and args.action == "upload":
+            return emit(True, upload_file(args.path, args.to))
+        if args.group == "file" and args.action == "download":
+            return emit(True, download_file(args.key, args.output))
+        if args.group == "file" and args.action == "move":
+            return emit(True, move_item(args.source, args.to))
+        if args.group == "file" and args.action == "search":
+            return emit(True, search_files(args.query, args.limit))
+        if args.group == "folder" and args.action == "create":
+            return emit(True, create_folder(args.path))
+    except Exception as exc:
+        return emit(False, {}, str(exc))
     parser.print_help()
     return 2
 

@@ -32,6 +32,7 @@ export type DriveItem = {
   size?: number | null;
   snippet?: string | null;
   locationPath?: string | null;
+  s3Key?: string | null;
 };
 
 async function commandJson<T>(name: string, payload: Record<string, unknown>): Promise<T> {
@@ -56,8 +57,23 @@ async function commandJson<T>(name: string, payload: Record<string, unknown>): P
 export const driveApi = {
   me: () => j<{ userId: string; tenantId: string }>("/api/me"),
   drives: () => j<{ drives: { id: string; rootFolderId: string | null; name: string; kind?: string }[] }>("/api/drives"),
-  children: (parentId: string) =>
-    j<{ items: { item: DriveItem }[] }>(`/api/items/${encodeURIComponent(parentId)}/children`),
+  children: (
+    parentId: string,
+    options?: { page?: number; limit?: number; type?: string | null },
+  ) => {
+    const p = new URLSearchParams();
+    if (options?.page != null) p.set("page", String(options.page));
+    if (options?.limit != null) p.set("limit", String(options.limit));
+    if (options?.type) p.set("type", options.type);
+    const q = p.toString();
+    return j<{
+      items: { item: DriveItem }[];
+      page: number;
+      limit: number;
+      total: number;
+      hasMore: boolean;
+    }>(`/api/items/${encodeURIComponent(parentId)}/children${q ? `?${q}` : ""}`);
+  },
   recent: () => j<{ items: { item: DriveItem }[] }>("/api/recent"),
   starred: () => j<{ items: { item: DriveItem }[] }>("/api/starred"),
   trashItems: () => j<{ items: { item: DriveItem }[] }>("/api/trash-items"),
