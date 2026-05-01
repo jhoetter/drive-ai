@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap");
+
 /* hofOS playful preset mapped to DriveAI's --ds-* bridge variables. */
 :root {
   --ds-bg-canvas: #faf8ff;
@@ -7,9 +9,12 @@
   --ds-fg-muted: #6b7280;
   --ds-accent: #7c3aed;
   --ds-radius: 8px;
+  --ds-font-sans: "Nunito", system-ui, -apple-system, sans-serif;
+  --ds-font-features: "cv02", "cv03", "cv04", "cv11";
 }
 
-[data-theme="dark"] {
+[data-theme="dark"],
+:root.hof-theme-dark {
   --ds-bg-canvas: #0f0a1a;
   --ds-bg-subtle: #1a1425;
   --ds-border: #2e2640;
