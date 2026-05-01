@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Link,
@@ -12,38 +12,19 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
 import { ThemeProvider } from "next-themes";
+import { HofShellLayout, HOF_SHELL_APP_LINKS, type HofShellNavGroup } from "@hofos/shell-ui";
 import { BriefcaseBusiness, Command, FileText, Folder, FolderUp, Home, LayoutGrid, List, Mail, MessageCircle, Upload } from "lucide-react";
 import { create } from "zustand";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
 
-const HOF_SHELL_SIDEBAR_DEFAULT_WIDTH = 240;
-const HOF_SHELL_STORAGE_KEYS = {
-  sidebarWidth: "hof-shell-sidebar-width",
-  legacySidebarWidth: "hof-sidebar-width",
-} as const;
-
 const GLOBAL_APP_LINKS = [
   { id: "os", label: "App", href: "http://localhost:3000/", icon: Home },
-  { id: "hofos", label: "hofOS", href: "http://localhost:3600/customers", icon: BriefcaseBusiness },
-  { id: "mailai", label: "Mail", href: "http://localhost:3010/inbox", icon: Mail },
-  { id: "collabai", label: "Chat", href: "http://localhost:8010/", icon: MessageCircle },
-  { id: "driveai", label: "Drive", href: "http://localhost:3520/drive/home", icon: Folder },
-  { id: "pagesai", label: "Pages", href: "http://localhost:3399/pages", icon: FileText },
+  { id: "hofos", label: "hofOS", href: "http://localhost:3000/__subapps/hofos/customers", icon: BriefcaseBusiness },
+  { id: "mailai", label: "Mail", href: "http://localhost:3000/__subapps/mailai/inbox", icon: Mail },
+  { id: "collabai", label: "Chat", href: "http://localhost:3000/__subapps/collabai/", icon: MessageCircle },
+  { id: "driveai", label: "Drive", href: "/drive/home", icon: Folder },
+  { id: "pagesai", label: "Pages", href: "http://localhost:3000/__subapps/pagesai/pages", icon: FileText },
 ] as const;
-
-function readSidebarWidth(): number {
-  try {
-    const raw =
-      localStorage.getItem(HOF_SHELL_STORAGE_KEYS.sidebarWidth) ??
-      localStorage.getItem(HOF_SHELL_STORAGE_KEYS.legacySidebarWidth);
-    const value = raw ? Number(raw) : NaN;
-    return Number.isFinite(value) && value >= 140 && value <= 480
-      ? value
-      : HOF_SHELL_SIDEBAR_DEFAULT_WIDTH;
-  } catch {
-    return HOF_SHELL_SIDEBAR_DEFAULT_WIDTH;
-  }
-}
 
 type DriveView =
   | { mode: "folder"; folderId: string }
@@ -173,7 +154,6 @@ function DriveShell() {
   const staleFolderRedirectRef = useRef(false);
   const lastRouteFolderId = useRef<string | undefined>(undefined);
   const [qLocal, setQLocal] = useState("");
-  const sidebarWidth = readSidebarWidth();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -697,202 +677,69 @@ function DriveShell() {
     </header>
   );
 
-  const shellSidebar = (
-    <aside
-      style={{
-        width: sidebarWidth,
-        flexShrink: 0,
-        borderRight: "1px solid var(--dri-border)",
-        padding: 12,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        background: "var(--dri-surface-0)",
-      }}
-    >
-      <div style={{ borderBottom: "1px solid var(--dri-border)", margin: "-12px -12px 8px", padding: 12 }}>
-        <Link
-          to="/drive/home"
-          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "var(--dri-text)" }}
-        >
-          <Folder size={16} aria-hidden />
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Drive</span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => set({ open: true, query: "" })}
-          style={{
-            width: "100%",
-            marginTop: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 6,
-            border: "1px solid var(--dri-border)",
-            borderRadius: 8,
-            padding: "8px 10px",
-            background: "var(--dri-surface-1)",
-            color: "var(--dri-text-muted)",
-            cursor: "pointer",
-            fontSize: 14,
-          }}
-        >
-          <span>Actions</span>
-          <span style={{ fontSize: 10 }}>⌘K</span>
-        </button>
-      </div>
-      <div style={{ minHeight: 0, flex: 1, overflowY: "auto" }}>
-      <nav aria-label="Drive" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <DriveNavItem to="/drive/home" active={isNavHome}>
-          {t("home")}
-        </DriveNavItem>
-        <DriveNavItem to="/drive/my-drive" active={isNavMyDrive}>
-          {t("myDrive")}
-        </DriveNavItem>
-        <DriveNavItem to="/drive/recent" active={isNavRecent}>
-          {t("recent")}
-        </DriveNavItem>
-        <DriveNavItem to="/drive/starred" active={isNavStarred}>
-          {t("starred")}
-        </DriveNavItem>
-        <DriveNavItem to="/drive/shared-with-me" active={isNavShared}>
-          {t("sharedWithMe")}
-        </DriveNavItem>
-        <DriveNavItem to="/drive/shared-drives" active={isNavSharedDrives}>
-          {t("sharedDrives")}
-        </DriveNavItem>
-        <DriveNavItem to="/drive/trash" active={isNavTrash}>
-          {t("trash")}
-        </DriveNavItem>
-      </nav>
-      {canUpload && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-          <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={onFileInputChange} />
-          <input
-            ref={folderInputRef}
-            type="file"
-            multiple
-            {...{ webkitdirectory: "" }}
-            style={{ display: "none" }}
-            onChange={onFolderInputChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              border: "1px solid var(--dri-border)",
-              borderRadius: 8,
-              padding: "8px 10px",
-              background: "var(--dri-surface-1)",
-              cursor: uploading ? "default" : "pointer",
-              color: "var(--dri-text)",
-              fontSize: 14,
-            }}
-          >
-            <Upload size={16} aria-hidden />
-            {t("upload")}
-          </button>
-          <button
-            type="button"
-            onClick={() => folderInputRef.current?.click()}
-            disabled={uploading}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              border: "1px solid var(--dri-border)",
-              borderRadius: 8,
-              padding: "8px 10px",
-              background: "var(--dri-surface-1)",
-              cursor: uploading ? "default" : "pointer",
-              color: "var(--dri-text)",
-              fontSize: 14,
-            }}
-          >
-            <FolderUp size={16} aria-hidden />
-            {t("uploadFolder")}
-          </button>
-        </div>
+  const driveNavGroups: HofShellNavGroup[] = [
+    {
+      id: "drive",
+      label: "Drive",
+      items: [
+        { id: "home", label: t("home"), path: "/drive/home", icon: "home", active: isNavHome },
+        { id: "my-drive", label: t("myDrive"), path: "/drive/my-drive", icon: "folder", active: isNavMyDrive },
+        { id: "recent", label: t("recent"), path: "/drive/recent", icon: "clock", active: isNavRecent },
+        { id: "starred", label: t("starred"), path: "/drive/starred", icon: "star", active: isNavStarred },
+        { id: "shared", label: t("sharedWithMe"), path: "/drive/shared-with-me", icon: "users", active: isNavShared },
+        { id: "shared-drives", label: t("sharedDrives"), path: "/drive/shared-drives", icon: "hard-drive", active: isNavSharedDrives },
+        { id: "trash", label: t("trash"), path: "/drive/trash", icon: "trash-2", active: isNavTrash },
+      ],
+    },
+  ];
+
+  const uploadSlot = canUpload ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={onFileInputChange} />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        {...{ webkitdirectory: "" }}
+        style={{ display: "none" }}
+        onChange={onFolderInputChange}
+      />
+      <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="hof-shell-command">
+        <Upload size={14} aria-hidden />
+        {t("upload")}
+      </button>
+      <button type="button" onClick={() => folderInputRef.current?.click()} disabled={uploading} className="hof-shell-command">
+        <FolderUp size={14} aria-hidden />
+        {t("uploadFolder")}
+      </button>
+    </div>
+  ) : null;
+
+  const renderShell = (content: ReactNode) => (
+    <HofShellLayout
+      appId="driveai"
+      appLabel="Drive"
+      appIcon="folder"
+      currentPath={pathname}
+      primaryNavGroups={driveNavGroups}
+      appLinks={HOF_SHELL_APP_LINKS.map((link) =>
+        link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
       )}
-      </div>
-      <nav
-        aria-label="Apps"
-        style={{
-          borderTop: "1px solid var(--dri-border)",
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-          margin: "8px -12px 0",
-          padding: "8px 12px",
-        }}
-      >
-        <p style={{ margin: "4px 0", color: "var(--dri-text-muted)", fontSize: 11, textTransform: "uppercase" }}>Apps</p>
-        {GLOBAL_APP_LINKS.map((app) => {
-          const Icon = app.icon;
-          return (
-            <a
-              key={app.id}
-              href={app.href}
-              style={{
-                alignItems: "center",
-                display: "flex",
-                gap: 8,
-                textDecoration: "none",
-                color: app.id === "driveai" ? "var(--dri-text)" : "var(--dri-text-muted)",
-                background: app.id === "driveai" ? "var(--dri-surface-1)" : "transparent",
-                borderRadius: 8,
-                padding: "6px 8px",
-                fontSize: 14,
-              }}
-            >
-              <Icon size={14} aria-hidden />
-              <span>{app.label}</span>
-            </a>
-          );
-        })}
-      </nav>
-      <div
-        style={{
-          borderTop: "1px solid var(--dri-border)",
-          margin: "0 -12px -12px",
-          padding: "8px 12px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          color: "var(--dri-text-muted)",
-          fontSize: 13,
-        }}
-      >
-        <span
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 999,
-            background: "var(--dri-text)",
-            color: "var(--dri-surface-0)",
-            display: "grid",
-            placeItems: "center",
-            fontWeight: 700,
-            fontSize: 11,
-          }}
-        >
-          DR
-        </span>
-        <span>Drive user</span>
-      </div>
-    </aside>
+      user={{ name: "Drive user", initials: "DR" }}
+      onCommand={() => set({ open: true, query: "" })}
+      onNavigate={(path) => {
+        if (path.startsWith("/")) nav(path);
+        else window.location.href = path;
+      }}
+      topSlot={uploadSlot}
+    >
+      {content}
+    </HofShellLayout>
   );
 
   if (viewMode.mode === "file" && fileId) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex" }}>
-        {shellSidebar}
+    return renderShell(
+      <>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           {shellToolbar}
           <main id="main-content" style={{ flex: 1, padding: 16, overflow: "auto" }} tabIndex={-1}>
@@ -1007,13 +854,12 @@ function DriveShell() {
             </div>
           </div>
         )}
-      </div>
+      </>,
     );
   }
 
-  return (
-    <div style={{ minHeight: "100vh", display: "flex" }}>
-      {shellSidebar}
+  return renderShell(
+    <>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {shellToolbar}
         {uploadError && (
@@ -1430,13 +1276,13 @@ function DriveShell() {
           </div>
         </div>
       )}
-    </div>
+    </>,
   );
 }
 
 export function App() {
   return (
-    <ThemeProvider attribute="data-theme" defaultTheme="light" enableSystem>
+    <ThemeProvider attribute="data-theme" storageKey="hof-color-scheme" defaultTheme="system" enableSystem>
       <Routes>
         <Route
           path="/"

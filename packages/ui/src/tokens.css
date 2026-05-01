@@ -1,19 +1,32 @@
 /* Token-based theming: no hardcoded hex in components—use var(--dri-*) */
-:root {
-  --dri-surface-0: var(--ds-bg-canvas, #fafafa);
-  --dri-surface-1: var(--ds-bg-subtle, #f4f4f5);
-  --dri-border: var(--ds-border, #e4e4e7);
-  --dri-text: var(--ds-fg, #18181b);
-  --dri-text-muted: var(--ds-fg-muted, #71717a);
-  --dri-primary: var(--ds-accent, #3b82f6);
+:root,
+:root.hof-theme-light {
+  --dri-surface-0: var(--color-background, var(--ds-bg-canvas, #ffffff));
+  --dri-surface-1: var(--color-sidebar-background, var(--ds-bg-subtle, #fbfbfa));
+  --dri-border: var(--color-border, var(--ds-border, #e9e9e7));
+  --dri-text: var(--color-foreground, var(--ds-fg, #37352f));
+  --dri-text-muted: var(--color-muted-foreground, var(--ds-fg-muted, #787774));
+  --dri-primary: var(--color-accent, var(--ds-accent, #2383e2));
   --dri-radius: var(--ds-radius, 8px);
   --dri-focus: 2px solid var(--dri-primary);
 }
-[data-theme="dark"] {
-  --dri-surface-0: var(--ds-bg-canvas, #09090b);
-  --dri-surface-1: var(--ds-bg-subtle, #18181b);
-  --dri-border: var(--ds-border, #27272a);
-  --dri-text: var(--ds-fg, #fafafa);
-  --dri-text-muted: var(--ds-fg-muted, #a1a1aa);
-  --dri-primary: var(--ds-accent, #60a5fa);
+[data-theme="dark"],
+:root.hof-theme-dark {
+  --dri-surface-0: var(--color-background, var(--ds-bg-canvas, #191919));
+  --dri-surface-1: var(--color-sidebar-background, var(--ds-bg-subtle, #202020));
+  --dri-border: var(--color-border, var(--ds-border, #2f2f2f));
+  --dri-text: var(--color-foreground, var(--ds-fg, #e3e2e0));
+  --dri-text-muted: var(--color-muted-foreground, var(--ds-fg-muted, #9b9a97));
+  --dri-primary: var(--color-accent, var(--ds-accent, #529cca));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.hof-theme-light):not(.hof-theme-dark):not([data-theme="light"]):not([data-theme="dark"]) {
+    --dri-surface-0: var(--color-background, var(--ds-bg-canvas, #191919));
+    --dri-surface-1: var(--color-sidebar-background, var(--ds-bg-subtle, #202020));
+    --dri-border: var(--color-border, var(--ds-border, #2f2f2f));
+    --dri-text: var(--color-foreground, var(--ds-fg, #e3e2e0));
+    --dri-text-muted: var(--color-muted-foreground, var(--ds-fg-muted, #9b9a97));
+    --dri-primary: var(--color-accent, var(--ds-accent, #529cca));
+  }
 }

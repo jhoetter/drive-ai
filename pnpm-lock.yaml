@@ -32,6 +32,9 @@ importers:
       '@driveai/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@hofos/shell-ui':
+        specifier: file:../../vendor/hofos-shell-ui-0.1.0.tgz
+        version: file:vendor/hofos-shell-ui-0.1.0.tgz(lucide-react@0.460.0(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tanstack/react-query':
         specifier: ^5.66.0
         version: 5.100.5(react@19.2.5)
@@ -1328,6 +1331,14 @@ packages:
 
   '@fastify/websocket@11.2.0':
     resolution: {integrity: sha512-3HrDPbAG1CzUCqnslgJxppvzaAZffieOVbLp1DAy1huCSynUWPifSvfdEDUR8HlJLp3sp1A36uOM2tJogADS8w==}
+
+  '@hofos/shell-ui@file:vendor/hofos-shell-ui-0.1.0.tgz':
+    resolution: {integrity: sha512-Pu293QYC5wSV8bHyT8ROwUnXdN+63hHY39WwXbWBwENt6eh9PRhXBpmk4WvrKA2/l+fWpGN4IJszUT/YxQ0ATw==, tarball: file:vendor/hofos-shell-ui-0.1.0.tgz}
+    version: 0.1.0
+    peerDependencies:
+      lucide-react: '>=0.460.0'
+      react: '>=18.3.0'
+      react-dom: '>=18.3.0'
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -4064,6 +4075,12 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@hofos/shell-ui@file:vendor/hofos-shell-ui-0.1.0.tgz(lucide-react@0.460.0(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+    dependencies:
+      lucide-react: 0.460.0(react@19.2.5)
+      react: 19.2.5
+      react-dom: 19.2.5(react@19.2.5)
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
