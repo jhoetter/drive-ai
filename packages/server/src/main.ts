@@ -31,7 +31,7 @@ const port = Number(process.env.PORT ?? "3520");
 const { sql: pg, db } = createDb(databaseUrl);
 
 const userId = (process.env.DRIVEAI_DEV_USER_ID ?? "u_dev").trim();
-const tenantId = (process.env.DRIVEAI_DEV_TENANT_ID ?? "t_dev").trim();
+const tenantId = (process.env.DRIVEAI_DEV_TENANT_ID ?? "default").trim();
 
 const identity = buildHofJwtIdentity({
   expectedAudience: "driveai",

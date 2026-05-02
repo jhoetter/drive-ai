@@ -79,8 +79,8 @@ function useKeyboardPalette() {
         {
           key: "k",
           meta: true,
-          description: "Open command palette",
-          run: () => set({ open: true, query: "" }),
+          description: "Toggle command palette",
+          run: () => set({ open: !usePalette.getState().open, query: "" }),
         },
       ],
       [set],
@@ -120,7 +120,7 @@ function openOfficeEditor(item: DriveItem): void {
   if (!item.s3Key) return;
   const url = new URL("/edit-asset", hofOsBaseUrl());
   url.searchParams.set("key", item.s3Key);
-  url.searchParams.set("from", window.location.href);
+  url.searchParams.set("from", `${window.location.pathname}${window.location.search}`);
   window.location.href = url.toString();
 }
 
