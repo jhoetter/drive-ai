@@ -9,6 +9,18 @@
   --dri-primary: var(--color-accent, var(--ds-accent, #2383e2));
   --dri-radius: var(--hof-radius-md, var(--ds-radius));
   --dri-focus: 2px solid var(--dri-primary);
+  /* Icon chip accents — host --color-* when shell is loaded; fallback to neutrals/dri-primary. */
+  --dri-kind-folder-fg: var(--color-warning, var(--dri-primary));
+  --dri-kind-image-fg: var(--color-accent, var(--dri-primary));
+  --dri-kind-video-fg: color-mix(in oklab, var(--color-accent, var(--dri-primary)) 55%, var(--color-foreground, var(--dri-text)));
+  --dri-kind-audio-fg: var(--color-success, var(--dri-primary));
+  --dri-kind-pdf-fg: var(--color-error, var(--dri-primary));
+  --dri-kind-spreadsheet-fg: color-mix(in oklab, var(--color-success, var(--dri-primary)) 85%, var(--color-accent, var(--dri-primary)));
+  --dri-kind-presentation-fg: color-mix(in oklab, var(--color-warning, var(--dri-primary)) 50%, var(--color-error, var(--dri-primary)));
+  --dri-kind-archive-fg: var(--color-muted-foreground, var(--dri-text-muted));
+  --dri-kind-document-fg: color-mix(in oklab, var(--color-accent, var(--dri-primary)) 72%, var(--color-foreground, var(--dri-text)));
+  --dri-kind-code-fg: color-mix(in oklab, var(--color-accent, var(--dri-primary)) 58%, var(--color-success, var(--dri-primary)));
+  --dri-kind-file-fg: var(--color-muted-foreground, var(--dri-text-muted));
 }
 [data-theme="dark"],
 :root.hof-theme-dark {

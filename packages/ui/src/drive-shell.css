@@ -6,7 +6,7 @@
   .dri-drive-grid {
     width: 100%;
     min-width: 0;
-    border-radius: var(--dri-radius);
+    border-radius: 0;
     outline: none;
   }
 
@@ -19,10 +19,10 @@
     display: flex;
     width: 100%;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.625rem;
     border-bottom: 1px solid var(--dri-border);
     background-color: var(--dri-surface-1);
-    padding: 0.5rem 0.75rem;
+    padding: 0.3125rem 0.5rem;
     text-align: left;
     font-size: 0.75rem;
     font-weight: 600;
@@ -37,9 +37,9 @@
     min-width: 0;
     cursor: pointer;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.625rem;
     border-bottom: 1px solid var(--dri-border);
-    padding: 0.5rem 0.75rem;
+    padding: 0.3125rem 0.5rem;
     text-align: left;
     color: var(--dri-text);
     transition: background-color 0.12s ease;
@@ -60,14 +60,64 @@
 
   .dri-drive-icon-wrap {
     display: flex;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2rem;
+    width: 2rem;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
     border-radius: var(--dri-radius);
-    background-color: color-mix(in oklab, var(--dri-text-muted) 22%, transparent);
-    color: var(--dri-text-muted);
+    --dri-icon-chip-fg: var(--dri-kind-file-fg);
+    background-color: color-mix(in oklab, var(--dri-icon-chip-fg) 17%, transparent);
+    color: var(--dri-icon-chip-fg);
+  }
+
+  .dri-drive-icon-wrap--folder {
+    --dri-icon-chip-fg: var(--dri-kind-folder-fg);
+  }
+
+  .dri-drive-icon-wrap--image {
+    --dri-icon-chip-fg: var(--dri-kind-image-fg);
+  }
+
+  .dri-drive-icon-wrap--video {
+    --dri-icon-chip-fg: var(--dri-kind-video-fg);
+  }
+
+  .dri-drive-icon-wrap--audio {
+    --dri-icon-chip-fg: var(--dri-kind-audio-fg);
+  }
+
+  .dri-drive-icon-wrap--pdf {
+    --dri-icon-chip-fg: var(--dri-kind-pdf-fg);
+  }
+
+  .dri-drive-icon-wrap--spreadsheet {
+    --dri-icon-chip-fg: var(--dri-kind-spreadsheet-fg);
+  }
+
+  .dri-drive-icon-wrap--presentation {
+    --dri-icon-chip-fg: var(--dri-kind-presentation-fg);
+  }
+
+  .dri-drive-icon-wrap--archive {
+    --dri-icon-chip-fg: var(--dri-kind-archive-fg);
+  }
+
+  .dri-drive-icon-wrap--document {
+    --dri-icon-chip-fg: var(--dri-kind-document-fg);
+  }
+
+  .dri-drive-icon-wrap--code {
+    --dri-icon-chip-fg: var(--dri-kind-code-fg);
+  }
+
+  .dri-drive-icon-wrap--file {
+    --dri-icon-chip-fg: var(--dri-kind-file-fg);
+  }
+
+  .dri-drive-icon-wrap--lg {
+    height: 3.375rem;
+    width: 3.375rem;
   }
 
   .dri-drive-name-col {

@@ -11,7 +11,7 @@ import {
   useLocation,
 } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DriveBreadcrumbs, DriveGridView, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
+import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
 import { ThemeProvider } from "next-themes";
 import {
   HofShellLayout,
@@ -33,6 +33,9 @@ import { DriveToolbar } from "./components/DriveToolbar";
 import { driveItemToDisplayRow, searchHitToDriveItem } from "./drive-rows";
 import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
 import { driveShellSignOut } from "./shell-session";
+
+/** Horizontal inset for main chrome; aligns with list row horizontal padding (.dri-drive-row). */
+const MAIN_INSET = "0.5rem";
 
 type DriveView =
   | { mode: "folder"; folderId: string }
@@ -242,7 +245,6 @@ function DriveShell() {
   const driveLimit = positiveIntParam(searchParams.get("drive_limit"), 25);
   const folderType = searchParams.get("type");
   const qc = useQueryClient();
-  const [view, setView] = useState<"list" | "grid">("list");
   const { open, query, set } = usePalette();
   useKeyboardPalette();
   useRegisteredSearchShortcut();
@@ -852,10 +854,6 @@ function DriveShell() {
       setNewFolderName={setNewFolderName}
       setUploadError={setUploadError}
       submitNewFolder={submitNewFolder}
-      viewMode={viewMode.mode}
-      view={view}
-      setView={setView}
-      onOpenPalette={() => set({ open: true, query: "" })}
     />
   );
 
@@ -1059,7 +1057,16 @@ function DriveShell() {
           }}
         >
           {shellToolbar}
-          <main id="main-content" style={{ flex: 1, padding: 16, overflow: "auto", minHeight: 0 }} tabIndex={-1}>
+          <main
+            id="main-content"
+            style={{
+              flex: 1,
+              padding: `12px ${MAIN_INSET} 16px`,
+              overflow: "auto",
+              minHeight: 0,
+            }}
+            tabIndex={-1}
+          >
             {breadQ.data?.segments && breadQ.data.segments.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <DriveBreadcrumbs
@@ -1103,7 +1110,7 @@ function DriveShell() {
         {uploadError && (
           <div
             style={{
-              padding: "8px 16px",
+              padding: `8px ${MAIN_INSET}`,
               background: "var(--dri-surface-1)",
               borderBottom: "1px solid var(--dri-border)",
               color: "var(--dri-text)",
@@ -1132,7 +1139,7 @@ function DriveShell() {
         {viewMode.mode === "search" && (
           <div
             style={{
-              padding: "8px 16px",
+              padding: `8px ${MAIN_INSET}`,
               borderBottom: "1px solid var(--dri-border)",
               display: "flex",
               flexWrap: "wrap",
@@ -1218,7 +1225,7 @@ function DriveShell() {
         {inFolder && (
           <div
             style={{
-              padding: "8px 16px",
+              padding: `8px ${MAIN_INSET}`,
               borderBottom: "1px solid var(--dri-border)",
               display: "flex",
               flexWrap: "wrap",
@@ -1262,11 +1269,11 @@ function DriveShell() {
           }}
           tabIndex={-1}
         >
-          <div style={{ padding: "12px 16px 0 16px" }}>
+          <div style={{ padding: `6px ${MAIN_INSET} 0 ${MAIN_INSET}` }}>
             <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>{pageTitle}</h1>
           </div>
           {breadQ.data?.segments && breadQ.data.segments.length > 0 && inFolder && (
-            <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--dri-border)" }}>
+            <div style={{ padding: `6px ${MAIN_INSET}`, borderBottom: "1px solid var(--dri-border)" }}>
               <DriveBreadcrumbs
                 segments={breadQ.data.segments}
                 renderSegment={(s, label) => (
@@ -1281,7 +1288,12 @@ function DriveShell() {
             </div>
           )}
           <div
-            style={{ flex: 1, padding: 16, overflow: "auto", minHeight: 0 }}
+            style={{
+              flex: 1,
+              padding: "8px 0 12px",
+              overflow: "auto",
+              minHeight: 0,
+            }}
             onDrop={canUpload ? onDrop : undefined}
             onDragOver={canUpload ? (e) => e.preventDefault() : undefined}
           >
@@ -1289,6 +1301,8 @@ function DriveShell() {
               <div
                 style={{
                   marginBottom: 16,
+                  marginLeft: MAIN_INSET,
+                  marginRight: MAIN_INSET,
                   padding: 12,
                   borderRadius: "var(--hof-radius-lg)",
                   border: "1px solid var(--dri-border)",
@@ -1330,18 +1344,26 @@ function DriveShell() {
                 </div>
               </div>
             )}
-            {listLoading && <DriveListSkeleton />}
+            {listLoading && (
+              <div style={{ paddingLeft: MAIN_INSET, paddingRight: MAIN_INSET }}>
+                <DriveListSkeleton />
+              </div>
+            )}
             {!listLoading &&
               rows.length === 0 &&
               viewMode.mode === "search" &&
               !hasSearchCriteria && (
-                <p style={{ color: "var(--dri-text-muted)" }}>{t("typeQueryToSearch")}</p>
+                <p style={{ color: "var(--dri-text-muted)", padding: `0 ${MAIN_INSET}` }}>
+                  {t("typeQueryToSearch")}
+                </p>
               )}
             {!listLoading &&
               rows.length === 0 &&
               viewMode.mode === "search" &&
               hasSearchCriteria && (
-                <p style={{ color: "var(--dri-text-muted)" }}>{t("noSearchResults")}</p>
+                <p style={{ color: "var(--dri-text-muted)", padding: `0 ${MAIN_INSET}` }}>
+                  {t("noSearchResults")}
+                </p>
               )}
             {!listLoading &&
               rows.length === 0 &&
@@ -1349,7 +1371,7 @@ function DriveShell() {
                 viewMode.mode === "myDriveDefault" ||
                 viewMode.mode === "home") &&
               !childrenQ.isError && (
-                <div>
+                <div style={{ padding: `0 ${MAIN_INSET}` }}>
                   <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyFolder")}</p>
                   {canUpload && (
                     <>
@@ -1385,9 +1407,9 @@ function DriveShell() {
                 </div>
               )}
             {!listLoading && rows.length === 0 && viewMode.mode !== "search" && !inFolder && (
-              <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyList")}</p>
+              <p style={{ color: "var(--dri-text-muted)", padding: `0 ${MAIN_INSET}` }}>{t("emptyList")}</p>
             )}
-            {viewMode.mode !== "file" && view === "list" && displayRows.length > 0 && (
+            {viewMode.mode !== "file" && displayRows.length > 0 && (
               <DriveListView
                 ariaLabel={String(t("listAriaLabel"))}
                 columnLabels={{
@@ -1406,7 +1428,7 @@ function DriveShell() {
               hasSearchCriteria &&
               searchQ.data?.nextOffset != null &&
               rows.length > 0 && (
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 12, padding: `0 ${MAIN_INSET}` }}>
                   <button
                     type="button"
                     onClick={() => mergeSearch({ offset: String(searchQ.data!.nextOffset) })}
@@ -1419,16 +1441,6 @@ function DriveShell() {
                   </button>
                 </div>
               )}
-            {viewMode.mode !== "file" && view === "grid" && displayRows.length > 0 && (
-              <DriveGridView
-                ariaLabel={String(t("listAriaLabel"))}
-                rows={displayRows}
-                onRowOpen={(dr) => {
-                  const raw = rows.find((x) => x.id === dr.id);
-                  if (raw) openItem(raw);
-                }}
-              />
-            )}
             {inFolder && childrenQ.data && childrenQ.data.total > 0 && (
               <div
                 style={{
@@ -1437,6 +1449,7 @@ function DriveShell() {
                   justifyContent: "space-between",
                   gap: 12,
                   marginTop: 16,
+                  padding: `0 ${MAIN_INSET}`,
                   color: "var(--dri-text-muted)",
                   fontSize: 13,
                 }}

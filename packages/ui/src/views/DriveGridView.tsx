@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { DriveItemIcon } from "../icons/DriveItemIcon.js";
+import { driveIconKind } from "../icons/driveIconKind.js";
 import type { DriveListDisplayRow } from "./ListView.js";
 
 export function DriveGridView(props: {
@@ -82,7 +83,9 @@ export function DriveGridView(props: {
               }}
               onMouseEnter={() => setActiveIndex(i)}
             >
-              <div className="dri-drive-icon-wrap h-14 w-14 shrink-0">
+              <div
+                className={`dri-drive-icon-wrap dri-drive-icon-wrap--lg dri-drive-icon-wrap--${driveIconKind(r)} shrink-0`}
+              >
                 <DriveItemIcon size="lg" name={r.name} type={r.type} mime={r.mime} />
               </div>
               <span className="dri-drive-grid-card-label" title={r.name}>

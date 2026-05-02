@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { DriveItemIcon } from "../icons/DriveItemIcon.js";
+import { driveIconKind } from "../icons/driveIconKind.js";
 
 /** Pre-formatted row for filesystem table + keyboard nav. */
 export type DriveListDisplayRow = {
@@ -111,7 +112,10 @@ export function DriveListView(props: {
             }}
             onMouseEnter={() => setActiveIndex(i)}
           >
-            <div className="dri-drive-icon-wrap" role="gridcell">
+            <div
+              role="gridcell"
+              className={`dri-drive-icon-wrap dri-drive-icon-wrap--${driveIconKind(r)}`}
+            >
               <DriveItemIcon name={r.name} type={r.type} mime={r.mime} size="sm" />
             </div>
             <div className="dri-drive-name-col" role="gridcell">
