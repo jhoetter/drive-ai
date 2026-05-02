@@ -33,6 +33,7 @@ import { registerStaticWeb } from "./static-web.js";
 import { toDriveItemPayload } from "./mappers/item.js";
 import { starredFlagsForItems } from "./services/star-state.js";
 import { latestBlobKeysForItems } from "./services/blob-keys.js";
+import { countsVisibleChildrenByParentIds } from "./services/child-counts.js";
 
 function ident(
   req: FastifyRequest,
@@ -222,10 +223,16 @@ export async function buildApp(deps: AppDeps) {
       i.userId,
       rows.map((it) => it.id),
     );
+    const folderIds = rows.filter((it) => it.type === "folder").map((it) => it.id);
+    const folderCounts =
+      folderIds.length > 0
+        ? await countsVisibleChildrenByParentIds(db, folderIds, type)
+        : new Map<string, number>();
     return {
       items: rows.map((it) => ({
         item: toDriveItemPayload(it, keys.get(it.id), {
           starred: starMap.get(it.id) ?? false,
+          folderItemCount: it.type === "folder" ? (folderCounts.get(it.id) ?? 0) : undefined,
         }),
       })),
       page,

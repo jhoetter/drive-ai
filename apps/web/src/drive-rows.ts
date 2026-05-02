@@ -11,6 +11,7 @@ export function driveItemToDisplayRow(
     kindFolder: string;
     kindFile: string;
     kindOther: string;
+    folderItemsCount: (n: number) => string;
   },
 ): DriveListDisplayRow {
   const kind =
@@ -22,7 +23,9 @@ export function driveItemToDisplayRow(
 
   const sizeLabel =
     item.type === "folder"
-      ? labels.dash
+      ? typeof item.folderItemCount === "number"
+        ? labels.folderItemsCount(item.folderItemCount)
+        : labels.dash
       : formatDriveBytes(item.size ?? null, locale, labels.dash);
 
   const modifiedLabel = formatDriveModified(item.updatedAt ?? undefined, locale, labels.dash);

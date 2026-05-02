@@ -7,7 +7,8 @@ import { driveApi, type DriveItem } from "../api.js";
 export function MoveToFolderModal(props: {
   open: boolean;
   onClose: () => void;
-  item: Pick<DriveItem, "id" | "name" | "type"> | null;
+  /** One or more items to move (same batch). */
+  items: Pick<DriveItem, "id" | "name" | "type">[] | null;
   /** drive id → root folder id */
   driveRootById: Map<string, string>;
   /** Fallback when drive is unknown */
@@ -18,10 +19,16 @@ export function MoveToFolderModal(props: {
   const { t } = useTranslation("trans");
   const [browseId, setBrowseId] = useState<string | null>(null);
 
+  const firstId = props.items?.[0]?.id;
+  const movingIds = useMemo(
+    () => new Set(props.items?.map((i) => i.id) ?? []),
+    [props.items],
+  );
+
   const detailQ = useQuery({
-    queryKey: ["item", props.item?.id],
-    queryFn: () => driveApi.item(props.item!.id),
-    enabled: props.open && Boolean(props.item?.id),
+    queryKey: ["item", firstId],
+    queryFn: () => driveApi.item(firstId!),
+    enabled: props.open && Boolean(firstId),
   });
 
   const fullItem = detailQ.data?.item ?? null;
@@ -63,21 +70,26 @@ export function MoveToFolderModal(props: {
     return segs[segs.length - 2]?.id ?? null;
   }, [breadQ.data?.segments]);
 
-  const noopMove =
+  const singleItem = props.items?.length === 1 ? props.items[0] : null;
+  const noopMoveSingle =
+    singleItem &&
     fullItem?.parentId != null &&
     breadcrumbFolderId != null &&
     fullItem.parentId === breadcrumbFolderId;
   const canMoveHere =
     Boolean(fullItem) &&
-    Boolean(breadcrumbFolderId) &&
-    fullItem!.id !== breadcrumbFolderId &&
-    !noopMove;
+    breadcrumbFolderId != null &&
+    !movingIds.has(breadcrumbFolderId) &&
+    !detailQ.isLoading &&
+    (props.items?.length ?? 0) > 0 &&
+    (props.items!.length > 1 || !noopMoveSingle);
 
   const doMove = async () => {
-    const it = detailQ.data?.item;
-    if (!it || !breadcrumbFolderId) return;
+    if (!props.items?.length || !breadcrumbFolderId) return;
     try {
-      await driveApi.moveItem(it.id, breadcrumbFolderId);
+      for (const it of props.items) {
+        await driveApi.moveItem(it.id, breadcrumbFolderId);
+      }
       props.onMoved();
       props.onClose();
     } catch (e) {
@@ -86,7 +98,7 @@ export function MoveToFolderModal(props: {
     }
   };
 
-  if (!props.open || !props.item) return null;
+  if (!props.open || !props.items?.length) return null;
 
   return (
     <div
@@ -126,7 +138,7 @@ export function MoveToFolderModal(props: {
             {t("moveItemTitle")}
           </h2>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--dri-text-muted)" }}>
-            {props.item.name}
+            {props.items.length === 1 ? props.items[0]!.name : t("moveItemsSummary", { count: props.items.length })}
           </p>
         </div>
         <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--dri-border)", display: "flex", gap: 8 }}>
@@ -173,7 +185,7 @@ export function MoveToFolderModal(props: {
             </p>
           )}
           {childrenQ.data?.items.map(({ item: fi }) =>
-            fi.type === "folder" && fi.id !== fullItem?.id ? (
+            fi.type === "folder" && !movingIds.has(fi.id) ? (
               <button
                 key={fi.id}
                 type="button"
@@ -206,11 +218,13 @@ export function MoveToFolderModal(props: {
               </button>
             ) : null,
           )}
-          {childrenQ.data && childrenQ.data.items.filter((x) => x.item.type === "folder" && x.item.id !== fullItem?.id).length === 0 && !childrenQ.isLoading && (
-            <p style={{ padding: "12px 16px", color: "var(--dri-text-muted)", fontSize: 13 }}>
-              {t("moveNoSubfolders")}
-            </p>
-          )}
+          {childrenQ.data &&
+            childrenQ.data.items.filter((x) => x.item.type === "folder" && !movingIds.has(x.item.id)).length === 0 &&
+            !childrenQ.isLoading && (
+              <p style={{ padding: "12px 16px", color: "var(--dri-text-muted)", fontSize: 13 }}>
+                {t("moveNoSubfolders")}
+              </p>
+            )}
         </div>
         <div style={{ padding: "12px 16px", borderTop: "1px solid var(--dri-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button

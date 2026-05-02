@@ -43,6 +43,8 @@ export type DriveItem = {
   updatedAt?: string | null;
   trashedAt?: string | null;
   starred?: boolean;
+  /** Present for folder rows when the server includes direct children count */
+  folderItemCount?: number;
   /** Present on server payloads; used for moves across drives */
   driveId?: string | null;
   parentId?: string | null;

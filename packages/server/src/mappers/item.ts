@@ -13,15 +13,17 @@ export type DriveItemPayload = {
   updatedAt: string;
   s3Key: string | null;
   starred: boolean;
+  /** Populated for folders when the server attaches direct-child counts */
+  folderItemCount?: number;
 };
 
 export function toDriveItemPayload(
   row: typeof items.$inferSelect,
   s3Key?: string | null,
-  options?: { starred?: boolean },
+  options?: { starred?: boolean; folderItemCount?: number },
 ): DriveItemPayload {
   const starred = options?.starred ?? false;
-  return {
+  const base: DriveItemPayload = {
     id: row.id,
     driveId: row.driveId,
     parentId: row.parentId,
@@ -35,4 +37,8 @@ export function toDriveItemPayload(
     s3Key: s3Key ?? null,
     starred,
   };
+  if (row.type === "folder" && typeof options?.folderItemCount === "number") {
+    base.folderItemCount = options.folderItemCount;
+  }
+  return base;
 }

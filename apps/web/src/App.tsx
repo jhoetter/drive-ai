@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,7 +20,7 @@ import {
   type HofShellNavGroup,
   type HofShellUser,
 } from "@hofos/shell-ui";
-import { FolderPlus, FolderUp, Upload } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import { create } from "zustand";
 import {
   CommandPalette as HofCommandPalette,
@@ -40,8 +41,8 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
 import { driveShellSignOut } from "./shell-session";
 
-/** Horizontal inset for main chrome; aligns with list row horizontal padding (.dri-drive-row). */
-const MAIN_INSET = "0.5rem";
+/** Horizontal inset for main column chrome (breadcrumb, lists, messages). */
+const CONTENT_GUTTER = "1rem";
 
 type DriveView =
   | { mode: "folder"; folderId: string }
@@ -301,23 +302,26 @@ function DriveShell() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const staleFolderRedirectRef = useRef(false);
   const lastRouteFolderId = useRef<string | undefined>(undefined);
+  const selectionAnchorIdxRef = useRef<number | null>(null);
   const [qLocal, setQLocal] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [folderCreating, setFolderCreating] = useState(false);
   const [shellUser, setShellUser] = useState<HofShellUser | null>(null);
-  const [selectedListItemId, setSelectedListItemId] = useState<string | null>(null);
-  const [movePickerItem, setMovePickerItem] = useState<Pick<DriveItem, "id" | "name" | "type"> | null>(
+  const [selectedListItemIds, setSelectedListItemIds] = useState<Set<string>>(() => new Set());
+  const [movePickerItems, setMovePickerItems] = useState<Pick<DriveItem, "id" | "name" | "type">[] | null>(
     null,
   );
   const [renameTarget, setRenameTarget] = useState<Pick<DriveItem, "id" | "name" | "type"> | null>(null);
-  const [trashConfirmTarget, setTrashConfirmTarget] = useState<DriveListDisplayRow | null>(null);
+  const [trashConfirmTargets, setTrashConfirmTargets] = useState<
+    Pick<DriveListDisplayRow, "id" | "name" | "type">[] | null
+  >(null);
 
   const viewMode = driveView(pathname, rootId, fileId);
 
   useEffect(() => {
-    setSelectedListItemId(null);
+    setSelectedListItemIds(new Set());
   }, [pathname, rootId, viewMode.mode]);
 
   useEffect(() => {
@@ -365,7 +369,6 @@ function DriveShell() {
     viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home";
 
   const canUpload = inFolder && Boolean(effectiveFolderId);
-  const canScopeSearchToFolder = canUpload;
 
   useEffect(() => {
     if (!canUpload) setNewFolderOpen(false);
@@ -504,7 +507,7 @@ function DriveShell() {
   );
 
   const openMovePickerForRow = useCallback((row: Pick<DriveListDisplayRow, "id" | "name" | "type">) => {
-    setMovePickerItem({ id: row.id, name: row.name, type: row.type });
+    setMovePickerItems([{ id: row.id, name: row.name, type: row.type }]);
   }, []);
 
   const onDragMoveRowToFolder = useCallback(
@@ -513,7 +516,11 @@ function DriveShell() {
       setUploadError(null);
       try {
         await driveApi.moveItem(dragged.id, targetFolderId);
-        setSelectedListItemId((cur) => (cur === dragged.id ? null : cur));
+        setSelectedListItemIds((prev) => {
+          const next = new Set(prev);
+          next.delete(dragged.id);
+          return next;
+        });
         refreshAfterStructuralChange();
         void qc.invalidateQueries({ queryKey: ["item", dragged.id] });
         void qc.invalidateQueries({ queryKey: ["breadcrumb"], exact: false });
@@ -525,15 +532,18 @@ function DriveShell() {
     [qc, refreshAfterStructuralChange, t],
   );
 
-  const performTrashRow = useCallback(
-    async (dr: DriveListDisplayRow) => {
+  const performTrashItems = useCallback(
+    async (targets: Pick<DriveListDisplayRow, "id" | "name" | "type">[]) => {
+      if (!targets.length) return;
       setUploadError(null);
       try {
-        const kind = dr.type === "folder" ? ("folder" as const) : ("file" as const);
-        await driveApi.trashItem(dr.id, kind);
-        setSelectedListItemId((cur) => (cur === dr.id ? null : cur));
+        for (const dr of targets) {
+          const kind = dr.type === "folder" ? ("folder" as const) : ("file" as const);
+          await driveApi.trashItem(dr.id, kind);
+          void qc.invalidateQueries({ queryKey: ["item", dr.id] });
+        }
+        setSelectedListItemIds(new Set());
         refreshAfterStructuralChange();
-        void qc.invalidateQueries({ queryKey: ["item", dr.id] });
         void qc.invalidateQueries({ queryKey: ["breadcrumb"], exact: false });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e ?? "");
@@ -544,7 +554,7 @@ function DriveShell() {
   );
 
   const openTrashConfirm = useCallback((dr: DriveListDisplayRow) => {
-    setTrashConfirmTarget(dr);
+    setTrashConfirmTargets([{ id: dr.id, name: dr.name, type: dr.type }]);
   }, []);
 
   const showListRowActions = viewMode.mode !== "trash" && viewMode.mode !== "sharedDrives";
@@ -829,6 +839,7 @@ function DriveShell() {
       kindFolder: String(t("kindFolder")),
       kindFile: String(t("kindFile")),
       kindOther: String(t("kindOther")),
+      folderItemsCount: (n: number) => String(t("folderItemsCount", { count: n })),
     }),
     [t],
   );
@@ -840,15 +851,79 @@ function DriveShell() {
     [rows, driveSortKey, driveSortDir],
   );
 
+  const handleListRowSelect = useCallback(
+    (dr: DriveListDisplayRow, e: ReactMouseEvent) => {
+      const idx = sortedRows.findIndex((x) => x.id === dr.id);
+      if (e.shiftKey && selectionAnchorIdxRef.current != null && idx >= 0) {
+        const anchor = selectionAnchorIdxRef.current;
+        const lo = Math.min(anchor, idx);
+        const hi = Math.max(anchor, idx);
+        const next = new Set<string>();
+        for (let i = lo; i <= hi; i++) {
+          const r = sortedRows[i];
+          if (r) next.add(r.id);
+        }
+        setSelectedListItemIds(next);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey) {
+        setSelectedListItemIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(dr.id)) next.delete(dr.id);
+          else next.add(dr.id);
+          return next;
+        });
+        if (idx >= 0) selectionAnchorIdxRef.current = idx;
+        return;
+      }
+      setSelectedListItemIds(new Set([dr.id]));
+      if (idx >= 0) selectionAnchorIdxRef.current = idx;
+    },
+    [sortedRows],
+  );
+
+  const selectedItems = useMemo(
+    () => sortedRows.filter((x) => selectedListItemIds.has(x.id)),
+    [sortedRows, selectedListItemIds],
+  );
+
+  const openMovePickerForSelection = useCallback(() => {
+    const picks = sortedRows
+      .filter((x) => selectedListItemIds.has(x.id))
+      .map((x) => ({ id: x.id, name: x.name, type: x.type }));
+    if (!picks.length) return;
+    setMovePickerItems(picks);
+  }, [sortedRows, selectedListItemIds]);
+
+  const downloadSelectedFiles = useCallback(async () => {
+    const files = sortedRows.filter((x) => selectedListItemIds.has(x.id) && x.type === "file");
+    if (!files.length) return;
+    setUploadError(null);
+    for (const f of files) {
+      try {
+        await triggerDriveDownload(f.id);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e ?? "");
+        setUploadError(`${t("downloadError")}: ${msg}`);
+        break;
+      }
+    }
+  }, [sortedRows, selectedListItemIds, t]);
+
+  const openTrashConfirmSelection = useCallback(() => {
+    const picks = sortedRows
+      .filter((x) => selectedListItemIds.has(x.id))
+      .map((x) => ({ id: x.id, name: x.name, type: x.type }));
+    if (!picks.length) return;
+    setTrashConfirmTargets(picks);
+  }, [sortedRows, selectedListItemIds]);
+
   const displayRows = useMemo(
     () => sortedRows.map((row) => driveItemToDisplayRow(row, locale, displayLabels)),
     [sortedRows, locale, displayLabels],
   );
 
-  const selectedDriveItem = useMemo(
-    () => (selectedListItemId ? sortedRows.find((x) => x.id === selectedListItemId) : undefined),
-    [sortedRows, selectedListItemId],
-  );
+  const hasFileInSelection = selectedItems.some((x) => x.type === "file");
 
   if (drivesQ.isError && viewMode.mode !== "file") {
     const msg = drivesErrorMessage;
@@ -1018,16 +1093,15 @@ function DriveShell() {
       setQLocal={setQLocal}
       onSearchKeyDown={onSearchKeyDown}
       preview={preview}
-      nav={nav}
-      canScopeSearchToFolder={canScopeSearchToFolder}
-      effectiveFolderId={effectiveFolderId}
       canUpload={canUpload}
       uploading={uploading}
       folderCreating={folderCreating}
-      onRequestNewFolder={() => {
-        setUploadError(null);
-        setNewFolderOpen(true);
-      }}
+      onClearUploadError={() => setUploadError(null)}
+      onRequestNewFolder={() => setNewFolderOpen(true)}
+      fileInputRef={fileInputRef}
+      folderInputRef={folderInputRef}
+      onFileInputChange={onFileInputChange}
+      onFolderInputChange={onFolderInputChange}
     />
   );
 
@@ -1083,56 +1157,6 @@ function DriveShell() {
     },
   ];
 
-  const uploadSlot = canUpload ? (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        style={{ display: "none" }}
-        onChange={onFileInputChange}
-      />
-      <input
-        ref={folderInputRef}
-        type="file"
-        multiple
-        {...{ webkitdirectory: "" }}
-        style={{ display: "none" }}
-        onChange={onFolderInputChange}
-      />
-      <button
-        type="button"
-        onClick={() => {
-          setUploadError(null);
-          setNewFolderOpen(true);
-        }}
-        disabled={uploading || folderCreating}
-        className="hof-shell-command"
-      >
-        <FolderPlus size={14} aria-hidden />
-        {t("newFolder")}
-      </button>
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploading || folderCreating}
-        className="hof-shell-command"
-      >
-        <Upload size={14} aria-hidden />
-        {t("upload")}
-      </button>
-      <button
-        type="button"
-        onClick={() => folderInputRef.current?.click()}
-        disabled={uploading || folderCreating}
-        className="hof-shell-command"
-      >
-        <FolderUp size={14} aria-hidden />
-        {t("uploadFolder")}
-      </button>
-    </div>
-  ) : null;
-
   const renderShell = (content: ReactNode) => (
     <HofShellLayout
       appId="driveai"
@@ -1148,7 +1172,6 @@ function DriveShell() {
         if (path.startsWith("/") && !path.startsWith("/__subapps/")) nav(path);
         else navigateHandoffHref(path);
       }}
-      topSlot={uploadSlot}
     >
       {content}
       <HofCommandPalette
@@ -1179,7 +1202,7 @@ function DriveShell() {
             id="main-content"
             style={{
               flex: 1,
-              padding: `12px ${MAIN_INSET} 16px`,
+              padding: `12px ${CONTENT_GUTTER} 16px`,
               overflow: "auto",
               minHeight: 0,
             }}
@@ -1229,7 +1252,7 @@ function DriveShell() {
         {uploadError && (
           <div
             style={{
-              padding: `8px ${MAIN_INSET}`,
+              padding: `8px ${CONTENT_GUTTER}`,
               background: "var(--dri-surface-1)",
               borderBottom: "1px solid var(--dri-border)",
               color: "var(--dri-text)",
@@ -1258,7 +1281,7 @@ function DriveShell() {
         {viewMode.mode === "search" && (
           <div
             style={{
-              padding: `6px ${MAIN_INSET}`,
+              padding: `6px ${CONTENT_GUTTER}`,
               borderBottom: "1px solid var(--dri-border)",
               display: "flex",
               flexWrap: "wrap",
@@ -1345,7 +1368,7 @@ function DriveShell() {
         {inFolder ? (
           <header
             style={{
-              padding: `4px ${MAIN_INSET}`,
+              padding: `8px ${CONTENT_GUTTER}`,
               borderBottom: "1px solid var(--dri-border)",
               display: "flex",
               flexWrap: "wrap",
@@ -1424,7 +1447,7 @@ function DriveShell() {
         ) : viewMode.mode === "search" ? null : (
           <header
             style={{
-              padding: `4px ${MAIN_INSET}`,
+              padding: `8px ${CONTENT_GUTTER}`,
               borderBottom: "1px solid var(--dri-border)",
               background: "var(--dri-surface-0)",
             }}
@@ -1445,66 +1468,60 @@ function DriveShell() {
           }}
           tabIndex={-1}
         >
-          {showListRowActions && selectedDriveItem && (
+          {showListRowActions && selectedListItemIds.size > 0 && (
             <div
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 alignItems: "center",
                 gap: 8,
-                padding: `8px ${MAIN_INSET}`,
+                padding: `8px ${CONTENT_GUTTER}`,
                 borderBottom: "1px solid var(--dri-border)",
                 background: "var(--dri-surface-1)",
                 fontSize: 14,
               }}
             >
               <span style={{ color: "var(--dri-text-muted)", flex: "1 1 8rem", minWidth: "8rem" }}>
-                {t("selectionCount", { count: 1 })}
+                {t("selectionCount", { count: selectedListItemIds.size })}
               </span>
               <button
                 type="button"
-                onClick={() => openItem(selectedDriveItem)}
+                disabled={selectedItems.length !== 1}
+                onClick={() => {
+                  const only = selectedItems[0];
+                  if (only) openItem(only);
+                }}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "var(--hof-radius-lg)",
                   border: "1px solid var(--dri-border)",
                   background: "var(--dri-surface-0)",
-                  cursor: "pointer",
+                  cursor: selectedItems.length !== 1 ? "not-allowed" : "pointer",
                   fontSize: 14,
+                  opacity: selectedItems.length !== 1 ? 0.45 : 1,
                 }}
               >
                 {t("openItem")}
               </button>
-              {selectedDriveItem.type === "file" ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void triggerDownloadForDisplay({
-                      id: selectedDriveItem.id,
-                      type: selectedDriveItem.type,
-                    })
-                  }
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: "var(--hof-radius-lg)",
-                    border: "1px solid var(--dri-border)",
-                    background: "var(--dri-surface-0)",
-                    cursor: "pointer",
-                    fontSize: 14,
-                  }}
-                >
-                  {t("downloadFile")}
-                </button>
-              ) : null}
               <button
                 type="button"
-                onClick={() =>
-                  openMovePickerForRow({
-                    id: selectedDriveItem.id,
-                    name: selectedDriveItem.name,
-                    type: selectedDriveItem.type,
-                  })
-                }
+                disabled={!hasFileInSelection}
+                onClick={() => void downloadSelectedFiles()}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--hof-radius-lg)",
+                  border: "1px solid var(--dri-border)",
+                  background: "var(--dri-surface-0)",
+                  cursor: hasFileInSelection ? "pointer" : "not-allowed",
+                  fontSize: 14,
+                  opacity: hasFileInSelection ? 1 : 0.45,
+                }}
+              >
+                {t("downloadFile")}
+              </button>
+              <button
+                type="button"
+                onClick={() => openMovePickerForSelection()}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "var(--hof-radius-lg)",
@@ -1518,7 +1535,21 @@ function DriveShell() {
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedListItemId(null)}
+                onClick={() => openTrashConfirmSelection()}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--hof-radius-lg)",
+                  border: "1px solid var(--dri-border)",
+                  background: "var(--dri-surface-0)",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                {t("trashToBinAction")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedListItemIds(new Set())}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "var(--hof-radius-lg)",
@@ -1535,7 +1566,7 @@ function DriveShell() {
           <div
             style={{
               flex: 1,
-              padding: "0 0 12px",
+              padding: "0 0 14px",
               overflow: "auto",
               minHeight: 0,
             }}
@@ -1555,8 +1586,8 @@ function DriveShell() {
               <div
                 style={{
                   marginBottom: 16,
-                  marginLeft: MAIN_INSET,
-                  marginRight: MAIN_INSET,
+                  marginLeft: CONTENT_GUTTER,
+                  marginRight: CONTENT_GUTTER,
                   padding: 12,
                   borderRadius: "var(--hof-radius-lg)",
                   border: "1px solid var(--dri-border)",
@@ -1599,7 +1630,7 @@ function DriveShell() {
               </div>
             )}
             {listLoading && (
-              <div style={{ paddingLeft: MAIN_INSET, paddingRight: MAIN_INSET }}>
+              <div style={{ paddingLeft: CONTENT_GUTTER, paddingRight: CONTENT_GUTTER }}>
                 <DriveListSkeleton />
               </div>
             )}
@@ -1607,7 +1638,7 @@ function DriveShell() {
               rows.length === 0 &&
               viewMode.mode === "search" &&
               !hasSearchCriteria && (
-                <p style={{ color: "var(--dri-text-muted)", padding: `0 ${MAIN_INSET}` }}>
+                <p style={{ color: "var(--dri-text-muted)", padding: `0 ${CONTENT_GUTTER}` }}>
                   {t("typeQueryToSearch")}
                 </p>
               )}
@@ -1615,7 +1646,7 @@ function DriveShell() {
               rows.length === 0 &&
               viewMode.mode === "search" &&
               hasSearchCriteria && (
-                <p style={{ color: "var(--dri-text-muted)", padding: `0 ${MAIN_INSET}` }}>
+                <p style={{ color: "var(--dri-text-muted)", padding: `0 ${CONTENT_GUTTER}` }}>
                   {t("noSearchResults")}
                 </p>
               )}
@@ -1625,7 +1656,7 @@ function DriveShell() {
                 viewMode.mode === "myDriveDefault" ||
                 viewMode.mode === "home") &&
               !childrenQ.isError && (
-                <div style={{ padding: `0 ${MAIN_INSET}` }}>
+                <div style={{ padding: `0 ${CONTENT_GUTTER}` }}>
                   <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyFolder")}</p>
                   {canUpload && (
                     <>
@@ -1661,7 +1692,7 @@ function DriveShell() {
                 </div>
               )}
             {!listLoading && rows.length === 0 && viewMode.mode !== "search" && !inFolder && (
-              <p style={{ color: "var(--dri-text-muted)", padding: `0 ${MAIN_INSET}` }}>{t("emptyList")}</p>
+              <p style={{ color: "var(--dri-text-muted)", padding: `0 ${CONTENT_GUTTER}` }}>{t("emptyList")}</p>
             )}
             {viewMode.mode !== "file" && displayRows.length > 0 && (
               <DriveListView
@@ -1679,10 +1710,11 @@ function DriveShell() {
                   rename: String(t("renameAction")),
                   moveToTrash: String(t("trashToBinAction")),
                 }}
+                ariaLabelOpenByName={(name) => String(t("openItemAria", { name }))}
                 rows={displayRows}
-                selectedId={selectedListItemId}
-                onRowSelect={(dr) => setSelectedListItemId(dr.id)}
-                onClearSelection={() => setSelectedListItemId(null)}
+                selectedIds={selectedListItemIds}
+                onRowSelect={handleListRowSelect}
+                onClearSelection={() => setSelectedListItemIds(new Set())}
                 onRowOpen={(dr) => {
                   const raw = sortedRows.find((x) => x.id === dr.id);
                   if (raw) openItem(raw);
@@ -1706,7 +1738,7 @@ function DriveShell() {
               hasSearchCriteria &&
               searchQ.data?.nextOffset != null &&
               rows.length > 0 && (
-                <div style={{ marginTop: 12, padding: `0 ${MAIN_INSET}` }}>
+                <div style={{ marginTop: 12, padding: `0 ${CONTENT_GUTTER}` }}>
                   <button
                     type="button"
                     onClick={() => mergeSearch({ offset: String(searchQ.data!.nextOffset) })}
@@ -1727,7 +1759,7 @@ function DriveShell() {
                   justifyContent: "space-between",
                   gap: 12,
                   marginTop: 16,
-                  padding: `0 ${MAIN_INSET}`,
+                  padding: `0 ${CONTENT_GUTTER}`,
                   color: "var(--dri-text-muted)",
                   fontSize: 13,
                 }}
@@ -1794,14 +1826,14 @@ function DriveShell() {
         </main>
       </div>
       <MoveToFolderModal
-        open={movePickerItem != null}
-        onClose={() => setMovePickerItem(null)}
-        item={movePickerItem}
+        open={movePickerItems != null && movePickerItems.length > 0}
+        onClose={() => setMovePickerItems(null)}
+        items={movePickerItems}
         driveRootById={driveRootById}
         fallbackRootFolderId={root?.rootFolderId ?? null}
         onMoved={() => {
-          setMovePickerItem(null);
-          setSelectedListItemId(null);
+          setMovePickerItems(null);
+          setSelectedListItemIds(new Set());
           refreshAfterStructuralChange();
         }}
         onError={(msg) => setUploadError(`${t("moveError")}: ${msg}`)}
@@ -1826,22 +1858,27 @@ function DriveShell() {
         onError={(msg) => setUploadError(`${t("renameError")}: ${msg}`)}
       />
       <ConfirmDialog
-        open={trashConfirmTarget != null}
+        open={trashConfirmTargets != null && trashConfirmTargets.length > 0}
         title={String(t("trashToBinAction"))}
         description={
-          trashConfirmTarget
-            ? `${String(t("trashConfirm"))}\n\n${trashConfirmTarget.name}`
+          trashConfirmTargets != null && trashConfirmTargets.length > 0
+            ? trashConfirmTargets.length === 1
+              ? `${String(t("trashConfirm"))}\n\n${trashConfirmTargets[0]!.name}`
+              : `${String(t("trashConfirmBulk", { count: trashConfirmTargets.length }))}\n\n${trashConfirmTargets
+                  .slice(0, 12)
+                  .map((x) => x.name)
+                  .join("\n")}${trashConfirmTargets.length > 12 ? "\n…" : ""}`
             : ""
         }
         confirmLabel={String(t("trashToBinAction"))}
         cancelLabel={String(t("cancel"))}
         danger
-        onCancel={() => setTrashConfirmTarget(null)}
+        onCancel={() => setTrashConfirmTargets(null)}
         onConfirm={async () => {
-          const dr = trashConfirmTarget;
-          if (!dr) return;
-          setTrashConfirmTarget(null);
-          await performTrashRow(dr);
+          const targets = trashConfirmTargets;
+          if (!targets?.length) return;
+          setTrashConfirmTargets(null);
+          await performTrashItems(targets);
         }}
       />
     </>,

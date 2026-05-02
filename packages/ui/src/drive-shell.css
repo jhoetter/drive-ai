@@ -22,13 +22,33 @@
     gap: 0.625rem;
     border-bottom: 1px solid var(--dri-border);
     background-color: var(--dri-surface-1);
-    padding: 0.3125rem 0.5rem;
+    padding: 0.5rem 1rem;
     text-align: left;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--dri-text-muted);
+  }
+
+  @media (min-width: 768px) {
+    .dri-drive-header-row .dri-drive-meta-col-wide {
+      display: flex;
+      justify-content: flex-end;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .dri-drive-header-row .dri-drive-meta-col {
+      display: flex;
+      justify-content: flex-end;
+    }
+  }
+
+  .dri-drive-header-row .dri-drive-meta-col-wide .dri-drive-sort-header-btn,
+  .dri-drive-header-row .dri-drive-meta-col .dri-drive-sort-header-btn {
+    justify-content: flex-end;
+    text-align: right;
   }
 
   .dri-drive-row {
@@ -39,7 +59,7 @@
     align-items: center;
     gap: 0.625rem;
     border-bottom: 1px solid var(--dri-border);
-    padding: 0.3125rem 0.5rem;
+    padding: 0.5rem 1rem;
     text-align: left;
     color: var(--dri-text);
     transition: background-color 0.12s ease;
@@ -332,7 +352,7 @@
 
   .dri-drive-name-col {
     min-width: 0;
-    flex: 1;
+    flex: 1 1 0%;
   }
 
   .dri-drive-name-primary {
@@ -342,6 +362,42 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--dri-text);
+  }
+
+  .dri-drive-name-trigger {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: inherit;
+    color: color-mix(in oklab, var(--dri-primary) 82%, var(--dri-text));
+    text-decoration: underline transparent;
+    text-underline-offset: 0.15em;
+    transition:
+      color 120ms ease,
+      text-decoration-color 120ms ease;
+  }
+
+  .dri-drive-name-trigger:hover {
+    color: var(--dri-primary);
+    text-decoration-color: currentColor;
+  }
+
+  .dri-drive-name-trigger:focus-visible {
+    outline: var(--dri-focus);
+    outline-offset: 2px;
+    border-radius: 0.125rem;
   }
 
   .dri-drive-name-secondary {
@@ -357,8 +413,8 @@
 
   .dri-drive-meta-col {
     display: none;
-    width: 7.75rem;
-    flex: 0 0 7.75rem;
+    width: 8.5rem;
+    flex: 0 0 8.5rem;
     flex-shrink: 0;
     text-align: right;
     font-size: 0.75rem;
@@ -373,9 +429,10 @@
 
   .dri-drive-meta-col-wide {
     display: none;
-    width: 11rem;
-    flex: 0 0 11rem;
+    width: 11.5rem;
+    flex: 0 0 11.5rem;
     flex-shrink: 0;
+    margin-inline-start: auto;
     text-align: right;
     font-size: 0.75rem;
     color: var(--dri-text-muted);
@@ -384,6 +441,22 @@
   @media (min-width: 768px) {
     .dri-drive-meta-col-wide {
       display: block;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .dri-drive-meta-col-wide {
+      margin-inline-start: unset;
+    }
+
+    .dri-drive-meta-col {
+      margin-inline-start: auto;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .dri-drive-meta-col {
+      margin-inline-start: unset;
     }
   }
 

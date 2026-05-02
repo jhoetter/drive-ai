@@ -1,20 +1,27 @@
-import { type KeyboardEventHandler, type CSSProperties, type ReactElement } from "react";
-import type { NavigateFunction } from "react-router";
+import {
+  type ChangeEventHandler,
+  type KeyboardEventHandler,
+  type CSSProperties,
+  type ReactElement,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, FolderUp, Upload } from "lucide-react";
 
 export function DriveToolbar(props: {
   qLocal: string;
   setQLocal: (next: string) => void;
   onSearchKeyDown: KeyboardEventHandler<HTMLInputElement>;
   preview: string | null;
-  nav: NavigateFunction;
-  canScopeSearchToFolder: boolean;
-  effectiveFolderId: string | undefined;
   canUpload: boolean;
   uploading: boolean;
   folderCreating: boolean;
   onRequestNewFolder: () => void;
+  onClearUploadError: () => void;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  folderInputRef: RefObject<HTMLInputElement | null>;
+  onFileInputChange: ChangeEventHandler<HTMLInputElement>;
+  onFolderInputChange: ChangeEventHandler<HTMLInputElement>;
 }): ReactElement {
   const { t } = useTranslation("trans");
 
@@ -29,11 +36,6 @@ export function DriveToolbar(props: {
     cursor: "pointer",
     color: "var(--dri-text-muted)",
     fontSize: 13,
-  };
-
-  const searchInFolderStyle: CSSProperties = {
-    ...toolbarActionBtn,
-    whiteSpace: "nowrap",
   };
 
   const headerChrome: CSSProperties = {
@@ -63,9 +65,8 @@ export function DriveToolbar(props: {
     <header style={headerChrome}>
       <div
         style={{
-          flex: "0 1 26rem",
-          minWidth: 160,
-          maxWidth: "100%",
+          flex: "1 1 0%",
+          minWidth: 0,
           display: "flex",
           alignItems: "center",
         }}
@@ -80,31 +81,69 @@ export function DriveToolbar(props: {
           style={searchInputStyle}
         />
       </div>
-      {props.canScopeSearchToFolder && (
-        <button
-          type="button"
-          onClick={() => {
-            const par = new URLSearchParams();
-            par.set("folderId", props.effectiveFolderId!);
-            if (props.qLocal.trim()) par.set("q", props.qLocal.trim());
-            void props.nav({ pathname: "/drive/search", search: par.toString() });
+      {props.canUpload ? (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 10,
+            flexShrink: 0,
           }}
-          style={searchInFolderStyle}
         >
-          {t("searchInFolder")}
-        </button>
-      )}
-      {props.canUpload && (
-        <button
-          type="button"
-          onClick={props.onRequestNewFolder}
-          disabled={props.uploading || props.folderCreating}
-          style={{ ...toolbarActionBtn, whiteSpace: "nowrap" }}
-        >
-          <FolderPlus size={16} aria-hidden />
-          {t("newFolder")}
-        </button>
-      )}
+          <input
+            ref={props.fileInputRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={props.onFileInputChange}
+          />
+          <input
+            ref={props.folderInputRef}
+            type="file"
+            multiple
+            {...{ webkitdirectory: "" }}
+            style={{ display: "none" }}
+            onChange={props.onFolderInputChange}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              props.onClearUploadError();
+              props.onRequestNewFolder();
+            }}
+            disabled={props.uploading || props.folderCreating}
+            style={{ ...toolbarActionBtn, whiteSpace: "nowrap" }}
+          >
+            <FolderPlus size={16} aria-hidden />
+            {t("newFolder")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              props.onClearUploadError();
+              props.fileInputRef.current?.click();
+            }}
+            disabled={props.uploading || props.folderCreating}
+            style={{ ...toolbarActionBtn, whiteSpace: "nowrap" }}
+          >
+            <Upload size={16} aria-hidden />
+            {t("upload")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              props.onClearUploadError();
+              props.folderInputRef.current?.click();
+            }}
+            disabled={props.uploading || props.folderCreating}
+            style={{ ...toolbarActionBtn, whiteSpace: "nowrap" }}
+          >
+            <FolderUp size={16} aria-hidden />
+            {t("uploadFolder")}
+          </button>
+        </div>
+      ) : null}
       {props.preview && (
         <span style={{ color: "var(--dri-text-muted)", fontSize: 12 }}>
           preview={props.preview}

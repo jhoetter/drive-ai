@@ -11,19 +11,27 @@ import { resolveEffectiveRoleOnItem } from "./identity.js";
 import { toDriveItemPayload, type DriveItemPayload } from "../mappers/item.js";
 import { latestBlobKeysForItems } from "./blob-keys.js";
 import { starredFlagsForItems } from "./star-state.js";
+import { countsVisibleChildrenByParentIds } from "./child-counts.js";
 
 async function mapItemsWithBlobKeys(
   db: Db,
   userId: string,
   rows: (typeof items.$inferSelect)[],
+  listTypeFilter = "",
 ): Promise<{ item: DriveItemPayload }[]> {
   const ids = rows.map((r) => r.id);
   const flags = await starredFlagsForItems(db, userId, ids);
   const fileIds = rows.filter((r) => r.type === "file").map((r) => r.id);
   const keys = await latestBlobKeysForItems(db, fileIds);
+  const folderIds = rows.filter((r) => r.type === "folder").map((r) => r.id);
+  const folderCounts =
+    folderIds.length > 0
+      ? await countsVisibleChildrenByParentIds(db, folderIds, listTypeFilter)
+      : new Map<string, number>();
   return rows.map((row) => ({
     item: toDriveItemPayload(row, keys.get(row.id), {
       starred: flags.get(row.id) ?? false,
+      folderItemCount: row.type === "folder" ? (folderCounts.get(row.id) ?? 0) : undefined,
     }),
   }));
 }

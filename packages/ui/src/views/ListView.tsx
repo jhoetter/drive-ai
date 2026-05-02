@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, Download, FolderInput, MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
@@ -207,10 +207,12 @@ export function DriveListView(props: {
     /** aria-label for ⋮ triggers */
     rowActionsMenu?: string;
   };
+  /** Accessible label for the name control (defaults to `"Open ${name}"`). */
+  ariaLabelOpenByName?: (name: string) => string;
   rows: readonly DriveListDisplayRow[];
-  /** When set: files select on single-click; folders open on single-click; Enter / file double-click opens. When unset: single-click opens. */
-  selectedId?: string | null;
-  onRowSelect?: (row: DriveListDisplayRow) => void;
+  /** Selected row ids for multi-select. */
+  selectedIds?: ReadonlySet<string>;
+  onRowSelect?: (row: DriveListDisplayRow, event: ReactMouseEvent) => void;
   onRowOpen?: (row: DriveListDisplayRow) => void;
   onToggleStar?: (row: DriveListDisplayRow, nextStarred: boolean) => void | Promise<void>;
   sort?: { key: DriveListSortKey; dir: DriveListSortDir };
@@ -278,7 +280,12 @@ export function DriveListView(props: {
     if (props.rows.length === 0) return;
     const max = props.rows.length - 1;
     if (menuForRowId) return;
-    if (e.key === "Escape" && props.onClearSelection && props.selectedId) {
+    if (
+      e.key === "Escape" &&
+      props.onClearSelection &&
+      props.selectedIds &&
+      props.selectedIds.size > 0
+    ) {
       e.preventDefault();
       props.onClearSelection();
       return;
@@ -298,6 +305,7 @@ export function DriveListView(props: {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (!props.onRowOpen) return;
+      if (props.selectedIds != null && props.selectedIds.size > 1) return;
       openAt(activeIndex);
     }
   };
@@ -387,11 +395,7 @@ export function DriveListView(props: {
         {props.rows.map((r, i) => {
           const rowId = `${baseId}-${r.id}`;
           const keyboardActive = i === activeIndex;
-          const rowSelected =
-            props.selectedId != null &&
-            props.selectedId !== undefined &&
-            props.selectedId !== "" &&
-            props.selectedId === r.id;
+          const rowSelected = props.selectedIds?.has(r.id) ?? false;
           const menuOpenThis = menuForRowId === r.id;
           const draggableRow =
             dragIntoFolderEnabled && (r.type === "file" || r.type === "folder");
@@ -407,7 +411,6 @@ export function DriveListView(props: {
               draggable={draggableRow ? true : undefined}
               aria-grabbed={rowDragging ? true : undefined}
               className={`dri-drive-row dri-drive-row-focus ${keyboardActive ? "dri-drive-row-active" : ""} ${rowSelected ? "dri-drive-row-selected" : ""} ${folderDragOver ? "dri-drive-row--drag-over-folder" : ""} ${rowDragging ? "dri-drive-row--drag-source" : ""}`}
-              style={dragIntoFolderEnabled && draggableRow ? { cursor: "grab" as const } : undefined}
               onDragStart={(e) => {
                 if (!dragIntoFolderEnabled || !draggableRow) return;
                 const el = e.target as HTMLElement | null;
@@ -476,7 +479,7 @@ export function DriveListView(props: {
                     }
                   : undefined
               }
-              onClick={() => {
+              onClick={(e) => {
                 if (skipRowClickAfterDragRef.current) return;
                 setActiveIndex(i);
                 if (!selectionMode) {
@@ -484,10 +487,15 @@ export function DriveListView(props: {
                   return;
                 }
                 if (r.type === "folder") {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey) {
+                    e.preventDefault();
+                    props.onRowSelect?.(r, e);
+                    return;
+                  }
                   props.onRowOpen?.(r);
                   return;
                 }
-                props.onRowSelect?.(r);
+                props.onRowSelect?.(r, e);
               }}
               onDoubleClick={(ev) => {
                 if (skipRowClickAfterDragRef.current) return;
@@ -532,7 +540,22 @@ export function DriveListView(props: {
                 <DriveItemIcon name={r.name} type={r.type} mime={r.mime} size="sm" />
               </div>
               <div className="dri-drive-name-col" role="gridcell">
-                <div className="dri-drive-name-primary">{r.name}</div>
+                {props.onRowOpen ? (
+                  <button
+                    type="button"
+                    draggable={false}
+                    className="dri-drive-name-trigger"
+                    aria-label={(props.ariaLabelOpenByName ?? ((n: string) => `Open ${n}`))(r.name)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      props.onRowOpen!(r);
+                    }}
+                  >
+                    {r.name}
+                  </button>
+                ) : (
+                  <div className="dri-drive-name-primary">{r.name}</div>
+                )}
                 {r.snippet ? (
                   <p className="dri-drive-name-secondary">{r.snippet}</p>
                 ) : r.locationPath ? (
