@@ -11,7 +11,7 @@ export function DriveNavItem(props: { to: string; active: boolean; children: Rea
       style={{
         display: "block",
         padding: "8px 12px",
-        borderRadius: "var(--dri-radius, 8px)",
+        borderRadius: "var(--dri-radius)",
         textDecoration: "none",
         color: "var(--dri-text)",
         background: props.active ? "var(--dri-surface-1)" : "transparent",

@@ -21,9 +21,11 @@
   --color-hover: var(--ds-bg-subtle);
   --color-surface: var(--ds-bg-subtle);
   --font-sans: var(--ds-font-sans), ui-sans-serif, system-ui, sans-serif;
-  --radius-lg: var(--ds-radius);
-  --radius-md: var(--ds-radius);
-  --radius-sm: var(--ds-radius);
+  --radius-sm: var(--hof-radius-sm);
+  --radius-md: var(--hof-radius-md);
+  --radius-lg: var(--hof-radius-lg);
+  --radius-xl: var(--hof-radius-xl);
+  --radius-full: var(--hof-radius-full);
 }
 
 :root,
@@ -50,9 +52,23 @@
   --color-on-accent: var(--ds-on-accent);
   --font-sans: var(--ds-font-sans);
   --hof-body-font-features: var(--ds-font-features);
-  --hof-radius-sm: var(--ds-radius);
-  --hof-radius-md: var(--ds-radius);
-  --hof-radius-lg: var(--ds-radius);
+}
+
+/* Keep --color-* in sync when next-themes uses data-theme=dark but hof-shell :root stays light-only. */
+[data-theme="dark"],
+:root.hof-theme-dark {
+  --color-background: var(--ds-bg-canvas);
+  --color-foreground: var(--ds-fg);
+  --color-card: var(--ds-bg-canvas);
+  --color-sidebar-background: var(--ds-bg-subtle);
+  --color-border: var(--ds-border);
+  --color-accent: var(--ds-accent);
+  --color-muted-foreground: var(--ds-fg-muted);
+  --color-primary: var(--ds-fg);
+  --color-primary-foreground: var(--ds-bg-canvas);
+  --color-input: var(--ds-bg-subtle);
+  --color-hover: var(--ds-bg-subtle);
+  --color-surface: var(--ds-bg-subtle);
 }
 
 html,

@@ -85,7 +85,7 @@ export function DriveGridView(props: {
               <div className="dri-drive-icon-wrap h-14 w-14 shrink-0">
                 <DriveItemIcon size="lg" name={r.name} type={r.type} mime={r.mime} />
               </div>
-              <span className="max-w-full truncate text-xs font-medium text-foreground" title={r.name}>
+              <span className="dri-drive-grid-card-label" title={r.name}>
                 {r.name}
               </span>
             </div>

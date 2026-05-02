@@ -6,7 +6,12 @@
   --ds-fg: #1e1b4b;
   --ds-fg-muted: #6b7280;
   --ds-accent: #7c3aed;
-  --ds-radius: 8px;
+  --hof-radius-sm: 0.375rem;
+  --hof-radius-md: 0.5rem;
+  --hof-radius-lg: 0.625rem;
+  --hof-radius-xl: 1rem;
+  --hof-radius-full: 9999px;
+  --ds-radius: var(--hof-radius-md);
   --ds-font-sans: "Nunito", system-ui, -apple-system, sans-serif;
   --ds-font-features: "cv02", "cv03", "cv04", "cv11";
 }

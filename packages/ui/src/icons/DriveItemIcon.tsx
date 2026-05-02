@@ -30,7 +30,7 @@ export function DriveItemIcon(props: {
   const dim = props.size === "lg" ? 26 : 18;
   const common: LucideProps = {
     size: dim,
-    className: props.className ?? "text-muted-foreground",
+    className: props.className,
     "aria-hidden": true,
     strokeWidth: 2,
   };

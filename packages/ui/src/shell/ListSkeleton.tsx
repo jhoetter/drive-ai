@@ -16,7 +16,7 @@ export function DriveListSkeleton(props: { rows?: number; className?: string }):
           key={`sk-${i}`}
           style={{
             height: 40,
-            borderRadius: "var(--dri-radius, 8px)",
+            borderRadius: "var(--dri-radius)",
             background: "var(--dri-surface-1)",
             border: "1px solid var(--dri-border)",
             opacity: 0.9,

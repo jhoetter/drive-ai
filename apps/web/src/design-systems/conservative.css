@@ -10,7 +10,12 @@
   --ds-success: #047857;
   --ds-error: #991b1b;
   --ds-on-accent: #ffffff;
-  --ds-radius: 0.125rem;
+  --hof-radius-sm: 0px;
+  --hof-radius-md: 0.125rem;
+  --hof-radius-lg: 0.25rem;
+  --hof-radius-xl: 0.25rem;
+  --hof-radius-full: 9999px;
+  --ds-radius: var(--hof-radius-md);
   --ds-font-sans: "Source Serif 4", Georgia, "Times New Roman", serif;
   --ds-font-features: normal;
 }

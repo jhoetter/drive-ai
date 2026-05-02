@@ -34,7 +34,7 @@ export function DriveToolbar(props: {
     alignItems: "center",
     gap: 6,
     border: "1px solid var(--dri-border)",
-    borderRadius: 8,
+    borderRadius: "var(--hof-radius-lg)",
     padding: "6px 10px",
     background: "var(--dri-surface-1)",
     cursor: "pointer",
@@ -45,7 +45,7 @@ export function DriveToolbar(props: {
   const toolbarFolderInputStyle: CSSProperties = {
     minWidth: 140,
     maxWidth: 220,
-    borderRadius: 6,
+    borderRadius: "var(--hof-radius-md)",
     border: "1px solid var(--dri-border)",
     padding: "6px 8px",
     fontSize: 14,
@@ -71,7 +71,7 @@ export function DriveToolbar(props: {
   const searchInputStyle: CSSProperties = {
     width: "100%",
     minWidth: 0,
-    borderRadius: 6,
+    borderRadius: "var(--hof-radius-md)",
     border: "1px solid var(--dri-border)",
     padding: 8,
   };
@@ -177,7 +177,7 @@ export function DriveToolbar(props: {
           style={{
             display: "flex",
             border: "1px solid var(--dri-border)",
-            borderRadius: 6,
+            borderRadius: "var(--hof-radius-md)",
             flexShrink: 0,
           }}
         >

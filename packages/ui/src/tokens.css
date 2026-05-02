@@ -7,7 +7,7 @@
   --dri-text: var(--color-foreground, var(--ds-fg, #37352f));
   --dri-text-muted: var(--color-muted-foreground, var(--ds-fg-muted, #787774));
   --dri-primary: var(--color-accent, var(--ds-accent, #2383e2));
-  --dri-radius: var(--ds-radius, 8px);
+  --dri-radius: var(--hof-radius-md, var(--ds-radius));
   --dri-focus: 2px solid var(--dri-primary);
 }
 [data-theme="dark"],

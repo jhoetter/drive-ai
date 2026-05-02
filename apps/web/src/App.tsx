@@ -178,7 +178,7 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
           onClick={props.onBack}
           style={{
             marginTop: 8,
-            borderRadius: 8,
+            borderRadius: "var(--hof-radius-lg)",
             border: "1px solid var(--dri-border)",
             padding: "6px 10px",
           }}
@@ -202,7 +202,7 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
             type="button"
             onClick={() => openOfficeEditor(it)}
             style={{
-              borderRadius: 8,
+              borderRadius: "var(--hof-radius-lg)",
               border: "1px solid var(--dri-border)",
               padding: "8px 14px",
               background: "var(--dri-surface-1)",
@@ -216,7 +216,7 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
           type="button"
           onClick={() => void onDownload()}
           style={{
-            borderRadius: 8,
+            borderRadius: "var(--hof-radius-lg)",
             border: "1px solid var(--dri-border)",
             padding: "8px 14px",
             background: "var(--dri-surface-1)",
@@ -681,7 +681,7 @@ function DriveShell() {
           style={{
             fontSize: 12,
             padding: 12,
-            borderRadius: 8,
+            borderRadius: "var(--hof-radius-lg)",
             background: "var(--dri-surface-1)",
             border: "1px solid var(--dri-border)",
             whiteSpace: "pre-wrap",
@@ -706,7 +706,7 @@ function DriveShell() {
               style={{
                 marginTop: 12,
                 padding: "8px 14px",
-                borderRadius: 8,
+                borderRadius: "var(--hof-radius-lg)",
                 border: "1px solid var(--dri-border)",
                 background: "var(--dri-surface-0)",
                 cursor: "pointer",
@@ -722,7 +722,7 @@ function DriveShell() {
           style={{
             marginTop: 12,
             padding: "8px 14px",
-            borderRadius: 8,
+            borderRadius: "var(--hof-radius-lg)",
             border: "1px solid var(--dri-border)",
             background: "var(--dri-surface-0)",
             cursor: "pointer",
@@ -786,7 +786,7 @@ function DriveShell() {
   const chipStyle: React.CSSProperties = {
     fontSize: 13,
     padding: "4px 10px",
-    borderRadius: 999,
+    borderRadius: "var(--hof-radius-full)",
     border: "1px solid var(--dri-border)",
     background: "var(--dri-surface-1)",
     cursor: "pointer",
@@ -965,7 +965,7 @@ function DriveShell() {
             style={{
               width: "100%",
               minWidth: 0,
-              borderRadius: 6,
+              borderRadius: "var(--hof-radius-md)",
               border: "1px solid var(--dri-border)",
               padding: "6px 8px",
               fontSize: 14,
@@ -1048,9 +1048,18 @@ function DriveShell() {
   if (viewMode.mode === "file" && fileId) {
     return renderShell(
       <>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
           {shellToolbar}
-          <main id="main-content" style={{ flex: 1, padding: 16, overflow: "auto" }} tabIndex={-1}>
+          <main id="main-content" style={{ flex: 1, padding: 16, overflow: "auto", minHeight: 0 }} tabIndex={-1}>
             {breadQ.data?.segments && breadQ.data.segments.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <DriveBreadcrumbs
@@ -1080,7 +1089,16 @@ function DriveShell() {
 
   return renderShell(
     <>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
         {shellToolbar}
         {uploadError && (
           <div
@@ -1102,7 +1120,7 @@ function DriveShell() {
               onClick={() => setUploadError(null)}
               style={{
                 border: "1px solid var(--dri-border)",
-                borderRadius: 6,
+                borderRadius: "var(--hof-radius-md)",
                 padding: "2px 8px",
                 background: "var(--dri-surface-0)",
               }}
@@ -1272,7 +1290,7 @@ function DriveShell() {
                 style={{
                   marginBottom: 16,
                   padding: 12,
-                  borderRadius: 8,
+                  borderRadius: "var(--hof-radius-lg)",
                   border: "1px solid var(--dri-border)",
                 }}
               >
@@ -1288,7 +1306,7 @@ function DriveShell() {
                     onClick={() => void childrenQ.refetch()}
                     style={{
                       padding: "6px 12px",
-                      borderRadius: 8,
+                      borderRadius: "var(--hof-radius-lg)",
                       border: "1px solid var(--dri-border)",
                       background: "var(--dri-surface-1)",
                       cursor: "pointer",
@@ -1301,7 +1319,7 @@ function DriveShell() {
                     onClick={() => void nav("/drive/my-drive")}
                     style={{
                       padding: "6px 12px",
-                      borderRadius: 8,
+                      borderRadius: "var(--hof-radius-lg)",
                       border: "1px solid var(--dri-border)",
                       background: "var(--dri-surface-1)",
                       cursor: "pointer",
@@ -1351,7 +1369,7 @@ function DriveShell() {
                           alignItems: "center",
                           gap: 6,
                           border: "1px solid var(--dri-border)",
-                          borderRadius: 8,
+                          borderRadius: "var(--hof-radius-lg)",
                           padding: "8px 14px",
                           background: "var(--dri-surface-1)",
                           cursor: "pointer",
@@ -1394,7 +1412,7 @@ function DriveShell() {
                     onClick={() => mergeSearch({ offset: String(searchQ.data!.nextOffset) })}
                     style={{
                       ...chipStyle,
-                      borderRadius: 8,
+                      borderRadius: "var(--hof-radius-lg)",
                     }}
                   >
                     {t("searchLoadMore")}
@@ -1441,14 +1459,14 @@ function DriveShell() {
                     }
                     style={{
                       border: "1px solid var(--dri-border)",
-                      borderRadius: 6,
+                      borderRadius: "var(--hof-radius-md)",
                       padding: "6px 8px",
                       background: "var(--dri-surface-0)",
                       color: "var(--dri-text)",
                     }}
                     aria-label={t("itemsPerPage")}
                   >
-                    {[25, 50, 100].map((n) => (
+                    {[10, 25, 50, 100].map((n) => (
                       <option key={n} value={n}>
                         {n}
                       </option>
@@ -1460,7 +1478,7 @@ function DriveShell() {
                     onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page - 1) })}
                     style={{
                       ...chipStyle,
-                      borderRadius: 8,
+                      borderRadius: "var(--hof-radius-lg)",
                       opacity: childrenQ.data.page <= 1 ? 0.5 : 1,
                     }}
                   >
@@ -1472,7 +1490,7 @@ function DriveShell() {
                     onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page + 1) })}
                     style={{
                       ...chipStyle,
-                      borderRadius: 8,
+                      borderRadius: "var(--hof-radius-lg)",
                       opacity: childrenQ.data.hasMore ? 1 : 0.5,
                     }}
                   >

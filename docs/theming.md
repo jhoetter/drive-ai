@@ -3,7 +3,7 @@
 The web app layers **three styling surfaces**, all keyed off host `--ds-*` tokens:
 
 1. **`--dri-*` bridge** ([`packages/ui/src/tokens.css`](../packages/ui/src/tokens.css)) — maps semantic roles to `--color-*` fallbacks next-themes / shell expose.
-2. **Tailwind v4 `@theme inline`** ([`apps/web/src/index.css`](../apps/web/src/index.css)) — maps utilities such as `bg-background`, `text-muted-foreground`, `border-border`, `rounded-lg`, `bg-hover`, `bg-surface` directly to **`--ds-*`**, matching the presets in [`apps/web/src/design-systems/`](../apps/web/src/design-systems/).
+2. **Tailwind v4 `@theme inline`** ([`apps/web/src/index.css`](../apps/web/src/index.css)) — maps utilities such as `bg-background`, `text-muted-foreground`, `border-border`, `rounded-*` (via **`--hof-radius-*`**), `bg-hover`, `bg-surface` alongside **`--ds-*` color** tokens, matching the presets in [`apps/web/src/design-systems/`](../apps/web/src/design-systems/).
 3. **`@layer utilities`** in [`packages/ui/src/drive-shell.css`](../packages/ui/src/drive-shell.css) — shared file-manager row/card classes (`@apply` only; no hex).
 
 ## Host overrides (`--ds-*`)
@@ -18,6 +18,9 @@ On the host root (or a wrapper around the embedded app), set any of:
 | `--ds-fg`          | Primary text                    |
 | `--ds-fg-muted`    | Secondary text                  |
 | `--ds-accent`      | Primary / focus / links         |
+| `--ds-radius`      | Alias for “default radius” (= `--hof-radius-md`; presets set both) |
+
+Presets define **`--hof-radius-sm/md/lg/xl/full`** to match **hof-os data-app** design tokens (`tokens-default.css`, playful, conservative). `--dri-radius` resolves via `--hof-radius-md`.
 
 Each maps to a `--dri-*` variable with a built-in fallback when unset, for example:
 
@@ -29,7 +32,7 @@ Dark mode uses `[data-theme="dark"]` on a parent (e.g. `next-themes`); the same 
 
 ## What to prefer in product code
 
-- Tailwind semantics (`bg-hover`, `text-foreground`, `border-border`) and `dri-*` utility classes from `drive-shell.css` for repeatable layouts (lists, toolbars).
+- Tailwind semantics (`bg-hover`, `text-foreground`, `border-border`), **`rounded-*` utilities** mapped in `@theme` to **`var(--hof-radius-*)`** (same scale as hof-os data-app), and `dri-*` utility classes from `drive-shell.css` for repeatable layouts (lists, toolbars).
 - Reserve **`style={{}}` with `var(--dri-*)`** for one-offs until migrated.
 
 ## What to avoid in product code
