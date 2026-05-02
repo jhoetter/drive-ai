@@ -518,6 +518,39 @@ function DriveShell() {
     }
   }, [nav, pathname, rootId, fileId]);
 
+  const appLinks = useMemo(
+    () =>
+      HOF_SHELL_APP_LINKS.map((link) =>
+        link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
+      ),
+    [],
+  );
+
+  const paletteCommands = useMemo<CommandItem[]>(
+    () => [
+      {
+        id: "drive:home",
+        group: "Drive",
+        label: t("home"),
+        perform: () => void nav("/drive/home"),
+      },
+      {
+        id: "drive:my-drive",
+        group: "Drive",
+        label: t("myDrive"),
+        perform: () => void nav("/drive/my-drive"),
+      },
+      {
+        id: "drive:recent",
+        group: "Drive",
+        label: t("recent"),
+        perform: () => void nav("/drive/recent"),
+      },
+      ...createAppLinkCommands(appLinks),
+    ],
+    [appLinks, nav, t],
+  );
+
   if (drivesQ.isError) {
     const msg = drivesQ.error instanceof Error ? drivesQ.error.message : String(drivesQ.error);
     const looks401 = /(^|\D)401(\D|$)/.test(msg);
@@ -845,39 +878,6 @@ function DriveShell() {
       ],
     },
   ];
-
-  const appLinks = useMemo(
-    () =>
-      HOF_SHELL_APP_LINKS.map((link) =>
-        link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
-      ),
-    [],
-  );
-
-  const paletteCommands = useMemo<CommandItem[]>(
-    () => [
-      {
-        id: "drive:home",
-        group: "Drive",
-        label: t("home"),
-        perform: () => void nav("/drive/home"),
-      },
-      {
-        id: "drive:my-drive",
-        group: "Drive",
-        label: t("myDrive"),
-        perform: () => void nav("/drive/my-drive"),
-      },
-      {
-        id: "drive:recent",
-        group: "Drive",
-        label: t("recent"),
-        perform: () => void nav("/drive/recent"),
-      },
-      ...createAppLinkCommands(appLinks),
-    ],
-    [appLinks, nav, t],
-  );
 
   const uploadSlot = canUpload ? (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
