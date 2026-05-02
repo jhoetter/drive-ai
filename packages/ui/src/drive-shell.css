@@ -1,0 +1,57 @@
+/**
+ * Drive file-manager primitives — Tailwind @apply on design tokens (--ds-* / theme colors).
+ * Imported by apps/web/src/index.css only (Tailwind build context).
+ */
+@layer utilities {
+  .dri-drive-grid {
+    @apply w-full min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md;
+  }
+
+  .dri-drive-header-row {
+    @apply flex w-full items-center gap-3 border-b border-border bg-surface px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+  }
+
+  .dri-drive-row {
+    @apply flex w-full min-w-0 cursor-pointer items-center gap-3 border-b border-border px-3 py-2 text-left text-foreground transition-colors hover:bg-hover;
+  }
+
+  .dri-drive-row-active {
+    @apply bg-hover;
+  }
+
+  .dri-drive-row-focus {
+    @apply outline-none focus-visible:bg-hover;
+  }
+
+  .dri-drive-icon-wrap {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/40 text-muted-foreground;
+  }
+
+  .dri-drive-name-col {
+    @apply min-w-0 flex-1;
+  }
+
+  .dri-drive-name-primary {
+    @apply truncate text-sm font-medium text-foreground;
+  }
+
+  .dri-drive-name-secondary {
+    @apply mt-0.5 line-clamp-2 text-xs text-muted-foreground;
+  }
+
+  .dri-drive-meta-col {
+    @apply hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block;
+  }
+
+  .dri-drive-meta-col-wide {
+    @apply hidden w-36 shrink-0 text-right text-xs text-muted-foreground md:block;
+  }
+
+  .dri-drive-grid-card {
+    @apply flex min-h-[104px] cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-border bg-background p-3 text-center transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40;
+  }
+
+  .dri-drive-grid-card-active {
+    @apply bg-hover ring-2 ring-accent/30;
+  }
+}

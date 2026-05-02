@@ -30,10 +30,14 @@ export type DriveItem = {
   id: string;
   name: string;
   type: string;
+  mime?: string | null;
   size?: number | null;
   snippet?: string | null;
   locationPath?: string | null;
   s3Key?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  trashedAt?: string | null;
 };
 
 async function commandJson<T>(name: string, payload: Record<string, unknown>): Promise<T> {

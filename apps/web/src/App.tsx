@@ -11,17 +11,15 @@ import {
   useLocation,
 } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
+import { DriveBreadcrumbs, DriveGridView, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
 import { ThemeProvider } from "next-themes";
 import {
   HofShellLayout,
-  LucideIconByName,
   fetchHofShellUser,
-  signOutOfHofShell,
   type HofShellNavGroup,
   type HofShellUser,
 } from "@hofos/shell-ui";
-import { Command, FolderPlus, FolderUp, LayoutGrid, List, Upload } from "lucide-react";
+import { FolderPlus, FolderUp, Upload } from "lucide-react";
 import { create } from "zustand";
 import {
   CommandPalette as HofCommandPalette,
@@ -31,7 +29,10 @@ import {
   type CommandItem,
 } from "@hofos/ux";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
+import { DriveToolbar } from "./components/DriveToolbar";
+import { driveItemToDisplayRow, searchHitToDriveItem } from "./drive-rows";
 import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
+import { driveShellSignOut } from "./shell-session";
 
 type DriveView =
   | { mode: "folder"; folderId: string }
@@ -230,7 +231,7 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
 }
 
 function DriveShell() {
-  const { t } = useTranslation("trans");
+  const { t, i18n } = useTranslation("trans");
   const nav = useNavigate();
   const { pathname } = useLocation();
   const { rootId, fileId } = useParams();
@@ -576,17 +577,6 @@ function DriveShell() {
     [],
   );
 
-  const toolbarFolderInputStyle: React.CSSProperties = {
-    minWidth: 140,
-    maxWidth: 220,
-    borderRadius: 6,
-    border: "1px solid var(--dri-border)",
-    padding: "6px 8px",
-    fontSize: 14,
-    background: "var(--dri-surface-0)",
-    color: "var(--dri-text)",
-  };
-
   const paletteCommands = useMemo<CommandItem[]>(
     () => [
       {
@@ -613,7 +603,6 @@ function DriveShell() {
               id: "drive:new-folder",
               group: "Drive",
               label: t("newFolder"),
-              icon: <FolderPlus size={16} aria-hidden />,
               keywords: ["folder", "create", "mkdir", "directory"] as const,
               perform: () => {
                 setUploadError(null);
@@ -625,10 +614,61 @@ function DriveShell() {
         : []),
       ...createAppLinkCommands(appLinks, {
         navigate: (href) => navigateHandoffHref(href),
-        renderIcon: (app) => <LucideIconByName name={app.icon} size={16} />,
       }),
     ],
     [appLinks, canUpload, nav, t],
+  );
+
+  const rows: DriveItem[] = (() => {
+    if (
+      viewMode.mode === "folder" ||
+      viewMode.mode === "myDriveDefault" ||
+      viewMode.mode === "home"
+    ) {
+      return (childrenQ.data?.items ?? []).map((x) => x.item);
+    }
+    if (viewMode.mode === "recent") {
+      return (recentQ.data?.items ?? []).map((x) => x.item);
+    }
+    if (viewMode.mode === "starred") {
+      return (starredQ.data?.items ?? []).map((x) => x.item);
+    }
+    if (viewMode.mode === "trash") {
+      return (trashQ.data?.items ?? []).map((x) => x.item);
+    }
+    if (viewMode.mode === "sharedWithMe") {
+      return (sharedWithMeQ.data?.items ?? []).map((x) => x.item);
+    }
+    if (viewMode.mode === "sharedDrives") {
+      return (sharedDrivesQ.data?.drives ?? [])
+        .filter((d) => d.rootFolderId)
+        .map((d) => ({
+          id: d.rootFolderId!,
+          name: d.name,
+          type: "folder",
+        }));
+    }
+    if (viewMode.mode === "search") {
+      return (searchQ.data?.results ?? []).map(searchHitToDriveItem);
+    }
+    return [];
+  })();
+
+  const displayLabels = useMemo(
+    () => ({
+      dash: String(t("emDash")),
+      kindFolder: String(t("kindFolder")),
+      kindFile: String(t("kindFile")),
+      kindOther: String(t("kindOther")),
+    }),
+    [t],
+  );
+
+  const locale = i18n.language ?? "en";
+
+  const displayRows = useMemo(
+    () => rows.map((row) => driveItemToDisplayRow(row, locale, displayLabels)),
+    [rows, locale, displayLabels],
   );
 
   if (drivesQ.isError && viewMode.mode !== "file") {
@@ -718,48 +758,6 @@ function DriveShell() {
     return <div style={{ padding: 24 }}>{t("notConfigured")}</div>;
   }
 
-  const rows: DriveItem[] = (() => {
-    if (
-      viewMode.mode === "folder" ||
-      viewMode.mode === "myDriveDefault" ||
-      viewMode.mode === "home"
-    ) {
-      return (childrenQ.data?.items ?? []).map((x) => x.item);
-    }
-    if (viewMode.mode === "recent") {
-      return (recentQ.data?.items ?? []).map((x) => x.item);
-    }
-    if (viewMode.mode === "starred") {
-      return (starredQ.data?.items ?? []).map((x) => x.item);
-    }
-    if (viewMode.mode === "trash") {
-      return (trashQ.data?.items ?? []).map((x) => x.item);
-    }
-    if (viewMode.mode === "sharedWithMe") {
-      return (sharedWithMeQ.data?.items ?? []).map((x) => x.item);
-    }
-    if (viewMode.mode === "sharedDrives") {
-      return (sharedDrivesQ.data?.drives ?? [])
-        .filter((d) => d.rootFolderId)
-        .map((d) => ({
-          id: d.rootFolderId!,
-          name: d.name,
-          type: "folder",
-        }));
-    }
-    if (viewMode.mode === "search") {
-      return (searchQ.data?.results ?? []).map((r) => ({
-        id: r.itemId,
-        name: r.name,
-        type: r.type,
-        size: null,
-        snippet: r.snippet,
-        locationPath: r.locationPath ?? null,
-      }));
-    }
-    return [];
-  })();
-
   const listLoading = (() => {
     if (
       viewMode.mode === "folder" ||
@@ -836,178 +834,29 @@ function DriveShell() {
   const isNavSharedDrives = !inFile && p === "/drive/shared-drives";
   const isNavTrash = !inFile && p === "/drive/trash";
 
-  const toolbarActionBtn: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    border: "1px solid var(--dri-border)",
-    borderRadius: 8,
-    padding: "6px 10px",
-    background: "var(--dri-surface-1)",
-    cursor: "pointer",
-    color: "var(--dri-text-muted)",
-    fontSize: 13,
-  };
-
   const shellToolbar = (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: 12,
-        padding: "8px 16px",
-        borderBottom: "1px solid var(--dri-border)",
-        flexShrink: 0,
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
-        <input
-          data-testid="topbar-search"
-          value={qLocal}
-          onChange={(e) => setQLocal(e.target.value)}
-          onKeyDown={onSearchKeyDown}
-          placeholder={String(t("searchPlaceholder"))}
-          aria-label={t("searchHint")}
-          style={{
-            width: "100%",
-            minWidth: 0,
-            borderRadius: 6,
-            border: "1px solid var(--dri-border)",
-            padding: 8,
-          }}
-        />
-      </div>
-      {canScopeSearchToFolder && (
-        <button
-          type="button"
-          onClick={() => {
-            const par = new URLSearchParams();
-            par.set("folderId", effectiveFolderId!);
-            if (qLocal.trim()) par.set("q", qLocal.trim());
-            void nav({ pathname: "/drive/search", search: par.toString() });
-          }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            border: "1px solid var(--dri-border)",
-            borderRadius: 8,
-            padding: "6px 10px",
-            background: "var(--dri-surface-1)",
-            cursor: "pointer",
-            color: "var(--dri-text-muted)",
-            fontSize: 13,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {t("searchInFolder")}
-        </button>
-      )}
-      {canUpload &&
-        (!newFolderOpen ? (
-          <button
-            type="button"
-            onClick={() => {
-              setUploadError(null);
-              setNewFolderOpen(true);
-            }}
-            disabled={uploading || folderCreating}
-            style={{ ...toolbarActionBtn, whiteSpace: "nowrap" }}
-          >
-            <FolderPlus size={16} aria-hidden />
-            {t("newFolder")}
-          </button>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <input
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void submitNewFolder();
-                }
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  setNewFolderOpen(false);
-                  setNewFolderName("");
-                }
-              }}
-              placeholder={t("folderNamePlaceholder")}
-              aria-label={t("folderNamePlaceholder")}
-              autoFocus
-              disabled={folderCreating}
-              style={toolbarFolderInputStyle}
-            />
-            <button
-              type="button"
-              onClick={() => void submitNewFolder()}
-              disabled={folderCreating || !newFolderName.trim()}
-              style={{ ...toolbarActionBtn, color: "var(--dri-text)" }}
-            >
-              {t("createFolder")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setNewFolderOpen(false);
-                setNewFolderName("");
-              }}
-              disabled={folderCreating}
-              style={toolbarActionBtn}
-            >
-              {t("cancel")}
-            </button>
-          </div>
-        ))}
-      <button
-        type="button"
-        onClick={() => set({ open: true, query: "" })}
-        style={{ ...toolbarActionBtn, color: "var(--dri-text-muted)" }}
-      >
-        <Command size={16} aria-hidden />
-        {t("openPalette")}
-      </button>
-      {viewMode.mode !== "file" && (
-        <div
-          style={{
-            display: "flex",
-            border: "1px solid var(--dri-border)",
-            borderRadius: 6,
-            flexShrink: 0,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            style={{ background: "transparent", border: "none" }}
-            aria-pressed={view === "list"}
-          >
-            <List size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("grid")}
-            style={{ background: "transparent", border: "none" }}
-            aria-pressed={view === "grid"}
-          >
-            <LayoutGrid size={16} />
-          </button>
-        </div>
-      )}
-      {preview && (
-        <span style={{ color: "var(--dri-text-muted)", fontSize: 12 }}>preview={preview}</span>
-      )}
-    </header>
+    <DriveToolbar
+      qLocal={qLocal}
+      setQLocal={setQLocal}
+      onSearchKeyDown={onSearchKeyDown}
+      preview={preview}
+      nav={nav}
+      canScopeSearchToFolder={canScopeSearchToFolder}
+      effectiveFolderId={effectiveFolderId}
+      canUpload={canUpload}
+      uploading={uploading}
+      folderCreating={folderCreating}
+      newFolderOpen={newFolderOpen}
+      setNewFolderOpen={setNewFolderOpen}
+      newFolderName={newFolderName}
+      setNewFolderName={setNewFolderName}
+      setUploadError={setUploadError}
+      submitNewFolder={submitNewFolder}
+      viewMode={viewMode.mode}
+      view={view}
+      setView={setView}
+      onOpenPalette={() => set({ open: true, query: "" })}
+    />
   );
 
   const driveNavGroups: HofShellNavGroup[] = [
@@ -1177,7 +1026,7 @@ function DriveShell() {
       primaryNavGroups={driveNavGroups}
       appLinks={appLinks}
       user={shellUser}
-      onSignOut={() => signOutOfHofShell()}
+      onSignOut={() => driveShellSignOut()}
       onCommand={() => set({ open: true, query: "" })}
       onNavigate={(path) => {
         if (path.startsWith("/") && !path.startsWith("/__subapps/")) nav(path);
@@ -1520,11 +1369,19 @@ function DriveShell() {
             {!listLoading && rows.length === 0 && viewMode.mode !== "search" && !inFolder && (
               <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyList")}</p>
             )}
-            {viewMode.mode !== "file" && view === "list" && rows.length > 0 && (
+            {viewMode.mode !== "file" && view === "list" && displayRows.length > 0 && (
               <DriveListView
-                columnHeaders={{ name: t("columnName"), type: t("columnType") }}
-                rows={rows}
-                onRowOpen={openItem}
+                ariaLabel={String(t("listAriaLabel"))}
+                columnLabels={{
+                  name: String(t("columnName")),
+                  modified: String(t("columnModified")),
+                  size: String(t("columnSize")),
+                }}
+                rows={displayRows}
+                onRowOpen={(dr) => {
+                  const raw = rows.find((x) => x.id === dr.id);
+                  if (raw) openItem(raw);
+                }}
               />
             )}
             {viewMode.mode === "search" &&
@@ -1544,49 +1401,15 @@ function DriveShell() {
                   </button>
                 </div>
               )}
-            {viewMode.mode !== "file" && view === "grid" && rows.length > 0 && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-                  gap: 8,
+            {viewMode.mode !== "file" && view === "grid" && displayRows.length > 0 && (
+              <DriveGridView
+                ariaLabel={String(t("listAriaLabel"))}
+                rows={displayRows}
+                onRowOpen={(dr) => {
+                  const raw = rows.find((x) => x.id === dr.id);
+                  if (raw) openItem(raw);
                 }}
-              >
-                {rows.map((r) => (
-                  <div
-                    key={r.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openItem(r)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        openItem(r);
-                      }
-                    }}
-                    style={{
-                      border: "1px solid var(--dri-border)",
-                      borderRadius: 8,
-                      padding: 8,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span style={{ fontWeight: 500 }}>{r.name}</span>
-                    {r.locationPath ? (
-                      <span
-                        style={{
-                          display: "block",
-                          fontSize: 12,
-                          color: "var(--dri-text-muted)",
-                          marginTop: 4,
-                        }}
-                      >
-                        {r.locationPath}
-                      </span>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+              />
             )}
             {inFolder && childrenQ.data && childrenQ.data.total > 0 && (
               <div

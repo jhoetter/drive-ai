@@ -8,19 +8,16 @@ import {
   type Db,
 } from "@driveai/db";
 import { resolveEffectiveRoleOnItem } from "./identity.js";
+import { toDriveItemPayload, type DriveItemPayload } from "../mappers/item.js";
+import { latestBlobKeysForItems } from "./blob-keys.js";
 
-function mapItem(row: typeof items.$inferSelect) {
-  return {
-    id: row.id,
-    driveId: row.driveId,
-    parentId: row.parentId,
-    type: row.type,
-    name: row.name,
-    mime: row.mime,
-    size: row.size,
-    trashedAt: row.trashedAt,
-    createdAt: row.createdAt,
-  };
+async function mapItemsWithBlobKeys(
+  db: Db,
+  rows: (typeof items.$inferSelect)[],
+): Promise<{ item: DriveItemPayload }[]> {
+  const fileIds = rows.filter((r) => r.type === "file").map((r) => r.id);
+  const keys = await latestBlobKeysForItems(db, fileIds);
+  return rows.map((row) => ({ item: toDriveItemPayload(row, keys.get(row.id)) }));
 }
 
 /**
@@ -45,7 +42,7 @@ export async function listStarred(
   db: Db,
   tenantId: string,
   userId: string,
-): Promise<{ item: ReturnType<typeof mapItem> }[]> {
+): Promise<{ item: DriveItemPayload }[]> {
   const joined = await db
     .select()
     .from(userItemState)
@@ -60,14 +57,17 @@ export async function listStarred(
       )!,
     )
     .orderBy(desc(userItemState.lastViewedAt), desc(items.updatedAt));
-  return joined.map((x) => ({ item: mapItem(x.items) }));
+  return mapItemsWithBlobKeys(
+    db,
+    joined.map((x) => x.items),
+  );
 }
 
 export async function listSharedWithMe(
   db: Db,
   tenantId: string,
   userId: string,
-): Promise<{ item: ReturnType<typeof mapItem> }[]> {
+): Promise<{ item: DriveItemPayload }[]> {
   const joined = await db
     .select()
     .from(permissionGrants)
@@ -86,7 +86,7 @@ export async function listSharedWithMe(
   for (const j of joined) {
     if (!seen.has(j.items.id)) seen.set(j.items.id, j.items);
   }
-  return [...seen.values()].map((row) => ({ item: mapItem(row) }));
+  return mapItemsWithBlobKeys(db, [...seen.values()]);
 }
 
 export async function listRecent(
@@ -94,7 +94,7 @@ export async function listRecent(
   tenantId: string,
   userId: string,
   limit: number,
-): Promise<{ item: ReturnType<typeof mapItem> }[]> {
+): Promise<{ item: DriveItemPayload }[]> {
   const evs = await db
     .select()
     .from(activityEvents)
@@ -118,30 +118,30 @@ export async function listRecent(
   if (ids.length === 0) return [];
   const rows = await db.select().from(items).where(inArray(items.id, ids));
   const byId = new Map(rows.map((r) => [r.id, r]));
-  return ids
+  const ordered = ids
     .map((id) => byId.get(id))
-    .filter((row): row is typeof items.$inferSelect => row != null && row.trashedAt == null)
-    .map((row) => ({ item: mapItem(row) }));
+    .filter((row): row is typeof items.$inferSelect => row != null && row.trashedAt == null);
+  return mapItemsWithBlobKeys(db, ordered);
 }
 
 export async function listTrash(
   db: Db,
   tenantId: string,
   userId: string,
-): Promise<{ item: ReturnType<typeof mapItem> }[]> {
+): Promise<{ item: DriveItemPayload }[]> {
   const rows = await db
     .select()
     .from(items)
     .innerJoin(drives, eq(drives.id, items.driveId))
     .where(and(eq(drives.tenantId, tenantId), isNotNull(items.trashedAt))!)
     .orderBy(desc(items.trashedAt));
-  const out: { item: ReturnType<typeof mapItem> }[] = [];
+  const allowed: (typeof items.$inferSelect)[] = [];
   for (const r0 of rows) {
     const row = r0.items;
     const r = await resolveEffectiveRoleOnItem(db, userId, row.id);
-    if (r) out.push({ item: mapItem(row) });
+    if (r) allowed.push(row);
   }
-  return out;
+  return mapItemsWithBlobKeys(db, allowed);
 }
 
 export async function listSharedDrives(

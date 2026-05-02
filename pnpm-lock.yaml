@@ -304,6 +304,9 @@ importers:
 
   packages/ui:
     dependencies:
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@19.2.5)
       react:
         specifier: ^19.0.0
         version: 19.2.5
@@ -1340,7 +1343,6 @@ packages:
 
   '@hofos/shell-ui@0.1.0':
     resolution: {integrity: sha512-dOPsty+0KNoKPcA31bOZUY+iuQXw2/xDIDnndy2rw0dYEn5Iy/huRvnMoZfyeLPi+90AM9bAaMNFX65ipj3XFQ==}
-    version: 0.1.0
     peerDependencies:
       lucide-react: '>=0.460.0'
       react: '>=18.3.0'
@@ -1348,7 +1350,6 @@ packages:
 
   '@hofos/ux@0.1.0':
     resolution: {integrity: sha512-eM8uiSSUhG9Bpx2m9gh5T0QUXF4mdeqnv0rlLX8kqMTqs5hhiNwHUxVTOloY9qE2HwBJFY1P+IzRTb4NWnCy/g==}
-    version: 0.1.0
     peerDependencies:
       cmdk: '>=1.1.0'
       react: '>=18.3.0'
