@@ -83,7 +83,11 @@ export async function buildApp(deps: AppDeps) {
   registerSsoMiddleware(app);
 
   app.addHook("preHandler", async (req) => {
-    if (req.url === "/api/health" || req.url === "/api/ws-ping") {
+    if (
+      req.url === "/api/health" ||
+      req.url === "/api/ws-ping" ||
+      req.url.startsWith("/api/subapp-handoff/exchange")
+    ) {
       return;
     }
     const i = await deps.identity({ headers: req.headers as Record<string, unknown> });

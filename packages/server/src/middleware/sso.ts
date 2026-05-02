@@ -127,6 +127,23 @@ async function handleHandoff(request: FastifyRequest, reply: FastifyReply): Prom
 }
 
 export function registerSsoMiddleware(app: FastifyInstance): void {
+  app.post("/api/subapp-handoff/exchange", async (request, reply) => {
+    const body = request.body as { code?: unknown; audience?: unknown } | undefined;
+    const code = typeof body?.code === "string" ? body.code : "";
+    const audience = typeof body?.audience === "string" ? body.audience : "";
+    if (audience !== EXPECTED_AUDIENCE || !code) {
+      reply.code(400).send({ error: "audience and code are required" });
+      return;
+    }
+    const exchanged = await exchangeHandoffCode(code);
+    if (!exchanged) {
+      reply.code(401).send({ error: "invalid or expired handoff code" });
+      return;
+    }
+    reply
+      .header("set-cookie", cookieHeader(exchanged.token, exchanged.maxAgeSeconds))
+      .send({ ok: true });
+  });
   app.addHook("onRequest", handleHandoff);
 }
 

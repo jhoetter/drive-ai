@@ -23,6 +23,10 @@
   --color-secondary: var(--ds-fg-muted);
   --color-tertiary: color-mix(in srgb, var(--ds-fg-muted) 72%, var(--ds-bg-canvas));
   --color-divider: var(--ds-border);
+  --color-warning: var(--ds-warning);
+  --color-success: var(--ds-success);
+  --color-error: var(--ds-error);
+  --color-on-accent: var(--ds-on-accent);
   --font-sans: var(--ds-font-sans);
   --hof-body-font-features: var(--ds-font-features);
   --hof-radius-sm: var(--ds-radius);

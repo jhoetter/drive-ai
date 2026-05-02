@@ -144,6 +144,8 @@ export const driveApi = {
   /** Typed command dispatch (see packages/server command-dispatch). */
   folderEnsurePath: (parentId: string, segments: string[]) =>
     commandJson<{ folderId: string }>("folder:ensurePath", { parentId, segments }),
+  folderCreate: (parentId: string, name: string) =>
+    commandJson<{ id: string }>("folder:create", { parentId, name }),
 };
 
 export async function sha256Hex(buf: ArrayBuffer): Promise<string> {

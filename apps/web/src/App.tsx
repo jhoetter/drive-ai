@@ -21,7 +21,7 @@ import {
   type HofShellNavGroup,
   type HofShellUser,
 } from "@hofos/shell-ui";
-import { Command, FolderUp, LayoutGrid, List, Upload } from "lucide-react";
+import { Command, FolderPlus, FolderUp, LayoutGrid, List, Upload } from "lucide-react";
 import { create } from "zustand";
 import {
   CommandPalette as HofCommandPalette,
@@ -109,8 +109,26 @@ function hofOsBaseUrl(): string {
     "",
   );
   if (configured) return configured;
-  if (window.location.hostname === "localhost") return "http://localhost:3000";
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname.endsWith(".localhost")
+  ) {
+    return "http://localhost:3000";
+  }
   return `${window.location.protocol}//app.${window.location.hostname.replace(/^drive\./, "")}`;
+}
+
+function hofOsDriveUrl(): string {
+  const target = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const subappPath = target.startsWith(`${DRIVEAI_OS_SUBAPP_PREFIX}/`)
+    ? target
+    : `${DRIVEAI_OS_SUBAPP_PREFIX}${target.startsWith("/") ? target : `/${target}`}`;
+  return `${hofOsBaseUrl()}${subappPath}`;
+}
+
+function isUnauthorizedErrorMessage(message: string): boolean {
+  return /(^|\D)401(\D|$)/.test(message);
 }
 
 function isOfficeEditable(item: DriveItem): boolean {
@@ -234,6 +252,9 @@ function DriveShell() {
   const [qLocal, setQLocal] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [folderCreating, setFolderCreating] = useState(false);
   const [shellUser, setShellUser] = useState<HofShellUser | null>(null);
 
   const viewMode = driveView(pathname, rootId, fileId);
@@ -254,8 +275,23 @@ function DriveShell() {
     };
   }, []);
 
-  const drivesQ = useQuery({ queryKey: ["drives"], queryFn: driveApi.drives });
+  const drivesQ = useQuery({
+    queryKey: ["drives"],
+    queryFn: driveApi.drives,
+    retry: (failureCount, error) => {
+      const message = error instanceof Error ? error.message : String(error ?? "");
+      return !isUnauthorizedErrorMessage(message) && failureCount < 3;
+    },
+  });
   const root = drivesQ.data?.drives[0];
+  const drivesErrorMessage =
+    drivesQ.error instanceof Error ? drivesQ.error.message : String(drivesQ.error ?? "");
+  const needsHofHandoff = drivesQ.isError && isUnauthorizedErrorMessage(drivesErrorMessage);
+
+  useEffect(() => {
+    if (!needsHofHandoff) return;
+    window.location.href = hofOsDriveUrl();
+  }, [needsHofHandoff]);
 
   const effectiveFolderId: string | undefined =
     viewMode.mode === "folder"
@@ -266,6 +302,16 @@ function DriveShell() {
 
   const inFolder =
     viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home";
+
+  const canUpload = inFolder && Boolean(effectiveFolderId);
+  const canScopeSearchToFolder = canUpload;
+
+  useEffect(() => {
+    if (!canUpload) {
+      setNewFolderOpen(false);
+      setNewFolderName("");
+    }
+  }, [canUpload]);
 
   const childrenQ = useQuery({
     queryKey: ["children", effectiveFolderId, drivePage, driveLimit, folderType],
@@ -530,6 +576,17 @@ function DriveShell() {
     [],
   );
 
+  const toolbarFolderInputStyle: React.CSSProperties = {
+    minWidth: 140,
+    maxWidth: 220,
+    borderRadius: 6,
+    border: "1px solid var(--dri-border)",
+    padding: "6px 8px",
+    fontSize: 14,
+    background: "var(--dri-surface-0)",
+    color: "var(--dri-text)",
+  };
+
   const paletteCommands = useMemo<CommandItem[]>(
     () => [
       {
@@ -550,17 +607,33 @@ function DriveShell() {
         label: t("recent"),
         perform: () => void nav("/drive/recent"),
       },
+      ...(canUpload
+        ? [
+            {
+              id: "drive:new-folder",
+              group: "Drive",
+              label: t("newFolder"),
+              icon: <FolderPlus size={16} aria-hidden />,
+              keywords: ["folder", "create", "mkdir", "directory"] as const,
+              perform: () => {
+                setUploadError(null);
+                setNewFolderOpen(true);
+                usePalette.getState().set({ open: false, query: "" });
+              },
+            } satisfies CommandItem,
+          ]
+        : []),
       ...createAppLinkCommands(appLinks, {
         navigate: (href) => navigateHandoffHref(href),
         renderIcon: (app) => <LucideIconByName name={app.icon} size={16} />,
       }),
     ],
-    [appLinks, nav, t],
+    [appLinks, canUpload, nav, t],
   );
 
   if (drivesQ.isError && viewMode.mode !== "file") {
-    const msg = drivesQ.error instanceof Error ? drivesQ.error.message : String(drivesQ.error);
-    const looks401 = /(^|\D)401(\D|$)/.test(msg);
+    const msg = drivesErrorMessage;
+    const looks401 = needsHofHandoff;
     return (
       <div style={{ padding: 24, maxWidth: 520 }}>
         <p style={{ fontWeight: 600, marginBottom: 8 }}>{t("loadError")}</p>
@@ -581,9 +654,27 @@ function DriveShell() {
           {t("apiErrorHint")}
         </p>
         {looks401 && (
-          <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
-            {t("jwtDevHint")}
-          </p>
+          <>
+            <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
+              {t("jwtDevHint")}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = hofOsDriveUrl();
+              }}
+              style={{
+                marginTop: 12,
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid var(--dri-border)",
+                background: "var(--dri-surface-0)",
+                cursor: "pointer",
+              }}
+            >
+              {t("openViaHofOs")}
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -715,8 +806,24 @@ function DriveShell() {
     cursor: "pointer",
   };
 
-  const canUpload = inFolder && Boolean(effectiveFolderId);
-  const canScopeSearchToFolder = Boolean(effectiveFolderId) && inFolder;
+  const submitNewFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name || !effectiveFolderId) return;
+    setUploadError(null);
+    setFolderCreating(true);
+    try {
+      await driveApi.folderCreate(effectiveFolderId, name);
+      setNewFolderOpen(false);
+      setNewFolderName("");
+      await qc.refetchQueries({ queryKey: ["children", effectiveFolderId] });
+      void qc.invalidateQueries({ queryKey: ["search"] });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setUploadError(`${t("folderCreateError")}: ${msg}`);
+    } finally {
+      setFolderCreating(false);
+    }
+  };
 
   const p = pathname;
   const inFile = viewMode.mode === "file";
@@ -729,11 +836,25 @@ function DriveShell() {
   const isNavSharedDrives = !inFile && p === "/drive/shared-drives";
   const isNavTrash = !inFile && p === "/drive/trash";
 
+  const toolbarActionBtn: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    border: "1px solid var(--dri-border)",
+    borderRadius: 8,
+    padding: "6px 10px",
+    background: "var(--dri-surface-1)",
+    cursor: "pointer",
+    color: "var(--dri-text-muted)",
+    fontSize: 13,
+  };
+
   const shellToolbar = (
     <header
       style={{
         display: "flex",
         alignItems: "center",
+        flexWrap: "wrap",
         gap: 12,
         padding: "8px 16px",
         borderBottom: "1px solid var(--dri-border)",
@@ -783,20 +904,75 @@ function DriveShell() {
           {t("searchInFolder")}
         </button>
       )}
+      {canUpload &&
+        (!newFolderOpen ? (
+          <button
+            type="button"
+            onClick={() => {
+              setUploadError(null);
+              setNewFolderOpen(true);
+            }}
+            disabled={uploading || folderCreating}
+            style={{ ...toolbarActionBtn, whiteSpace: "nowrap" }}
+          >
+            <FolderPlus size={16} aria-hidden />
+            {t("newFolder")}
+          </button>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submitNewFolder();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setNewFolderOpen(false);
+                  setNewFolderName("");
+                }
+              }}
+              placeholder={t("folderNamePlaceholder")}
+              aria-label={t("folderNamePlaceholder")}
+              autoFocus
+              disabled={folderCreating}
+              style={toolbarFolderInputStyle}
+            />
+            <button
+              type="button"
+              onClick={() => void submitNewFolder()}
+              disabled={folderCreating || !newFolderName.trim()}
+              style={{ ...toolbarActionBtn, color: "var(--dri-text)" }}
+            >
+              {t("createFolder")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNewFolderOpen(false);
+                setNewFolderName("");
+              }}
+              disabled={folderCreating}
+              style={toolbarActionBtn}
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        ))}
       <button
         type="button"
         onClick={() => set({ open: true, query: "" })}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          border: "1px solid var(--dri-border)",
-          borderRadius: 8,
-          padding: "6px 10px",
-          background: "var(--dri-surface-1)",
-          cursor: "pointer",
-          color: "var(--dri-text-muted)",
-        }}
+        style={{ ...toolbarActionBtn, color: "var(--dri-text-muted)" }}
       >
         <Command size={16} aria-hidden />
         {t("openPalette")}
@@ -903,10 +1079,78 @@ function DriveShell() {
         style={{ display: "none" }}
         onChange={onFolderInputChange}
       />
+      {!newFolderOpen ? (
+        <button
+          type="button"
+          onClick={() => {
+            setUploadError(null);
+            setNewFolderOpen(true);
+          }}
+          disabled={uploading || folderCreating}
+          className="hof-shell-command"
+        >
+          <FolderPlus size={14} aria-hidden />
+          {t("newFolder")}
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+          <input
+            type="text"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void submitNewFolder();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setNewFolderOpen(false);
+                setNewFolderName("");
+              }
+            }}
+            placeholder={t("folderNamePlaceholder")}
+            aria-label={t("folderNamePlaceholder")}
+            autoFocus
+            disabled={folderCreating}
+            style={{
+              width: "100%",
+              minWidth: 0,
+              borderRadius: 6,
+              border: "1px solid var(--dri-border)",
+              padding: "6px 8px",
+              fontSize: 14,
+              background: "var(--dri-surface-0)",
+              color: "var(--dri-text)",
+            }}
+          />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => void submitNewFolder()}
+              disabled={folderCreating || !newFolderName.trim()}
+              className="hof-shell-command"
+            >
+              {t("createFolder")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNewFolderOpen(false);
+                setNewFolderName("");
+              }}
+              disabled={folderCreating}
+              className="hof-shell-command"
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </div>
+      )}
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        disabled={uploading}
+        disabled={uploading || folderCreating}
         className="hof-shell-command"
       >
         <Upload size={14} aria-hidden />
@@ -915,7 +1159,7 @@ function DriveShell() {
       <button
         type="button"
         onClick={() => folderInputRef.current?.click()}
-        disabled={uploading}
+        disabled={uploading || folderCreating}
         className="hof-shell-command"
       >
         <FolderUp size={14} aria-hidden />
@@ -1241,9 +1485,35 @@ function DriveShell() {
                 <div>
                   <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyFolder")}</p>
                   {canUpload && (
-                    <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
-                      {t("uploadDropHint")}
-                    </p>
+                    <>
+                      <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
+                        {t("uploadDropHint")}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadError(null);
+                          setNewFolderOpen(true);
+                        }}
+                        disabled={uploading || folderCreating}
+                        style={{
+                          marginTop: 12,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          border: "1px solid var(--dri-border)",
+                          borderRadius: 8,
+                          padding: "8px 14px",
+                          background: "var(--dri-surface-1)",
+                          cursor: "pointer",
+                          color: "var(--dri-text)",
+                          fontSize: 14,
+                        }}
+                      >
+                        <FolderPlus size={16} aria-hidden />
+                        {t("newFolder")}
+                      </button>
+                    </>
                   )}
                 </div>
               )}

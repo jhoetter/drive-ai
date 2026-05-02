@@ -6,8 +6,17 @@
 #   39000/39001 MinIO (docker)
 # ----------------------------------------------------------------------
 
+# `hof-os` → `make dev-native SUBAPP=driveai` exports DATABASE_URL (shared Postgres on :5432)
+# before running this Makefile. `-include .env` must not overwrite it with :35432 (or clear JWT).
+_HOF_OS_IMPORT_DB := $(DATABASE_URL)
+_HOF_OS_IMPORT_JWT := $(HOF_SUBAPP_JWT_SECRET)
 -include .env
 export
+ifneq ($(and $(strip $(_HOF_OS_IMPORT_JWT)),$(strip $(_HOF_OS_IMPORT_DB))),)
+DATABASE_URL := $(_HOF_OS_IMPORT_DB)
+HOF_SUBAPP_JWT_SECRET := $(_HOF_OS_IMPORT_JWT)
+HOFOS_SUBAPP_NATIVE := 1
+endif
 
 PNPM         ?= pnpm
 COMPOSE      ?= docker compose -f infra/docker/docker-compose.dev.yml
@@ -27,7 +36,7 @@ help:
 	@echo "  make stack-up   docker compose: Postgres + MinIO"
 	@echo "  make stack-down stop compose stack"
 	@echo "  make db-push    apply Drizzle schema (needs Postgres)"
-	@echo "  make dev        stack-up, db-push, kill-ports, then API :$(PORT) + web :$(WEB_PORT) (concurrently)"
+	@echo "  make dev        stack-up, db-push, kill-ports, then API + web (or hof-os: omit stack when JWT+shared DB in env)"
 	@echo "  make dev-app    only pnpm run dev (DB up + schema already applied)"
 	@echo "  make dev-wait   poll API + web until healthy (use after \`dev-app\` in a second terminal)"
 	@echo "  make kill-ports free :$(WEB_PORT) and :$(PORT) (retries; also pkill stray vite/turbo in this repo)"
@@ -57,7 +66,12 @@ db-push:
 	@DATABASE_URL=$(DATABASE_URL) $(PNPM) run db:push
 
 # Full local stack: mirrors collaboration-ai (kill-ports, then concurrently → one interleaved log stream).
+# When attached to hofOS (JWT + shared DATABASE_URL), skip local compose — API uses :5432, not :35432.
+ifeq ($(HOFOS_SUBAPP_NATIVE),1)
+dev: db-push kill-ports
+else
 dev: stack-up db-push kill-ports
+endif
 	@echo ""
 	@echo "  → API   http://127.0.0.1:$(PORT)   (GET /api/health)"
 	@echo "  → Web   http://localhost:$(WEB_PORT)/drive"

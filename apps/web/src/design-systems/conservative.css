@@ -6,7 +6,11 @@
   --ds-fg: #0c0a09;
   --ds-fg-muted: #57534e;
   --ds-accent: #1e3a8a;
-  --ds-radius: 2px;
+  --ds-warning: #b45309;
+  --ds-success: #047857;
+  --ds-error: #991b1b;
+  --ds-on-accent: #ffffff;
+  --ds-radius: 0.125rem;
   --ds-font-sans: "Source Serif 4", Georgia, "Times New Roman", serif;
   --ds-font-features: normal;
 }
@@ -19,4 +23,8 @@
   --ds-fg: #fafaf9;
   --ds-fg-muted: #a8a29e;
   --ds-accent: #93c5fd;
+  --ds-warning: #d97706;
+  --ds-success: #34d399;
+  --ds-error: #fca5a5;
+  --ds-on-accent: #0c0a09;
 }
