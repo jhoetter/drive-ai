@@ -8,3 +8,4 @@ dist
 coverage
 release-out
 drizzle/meta
+vendor/hofos/

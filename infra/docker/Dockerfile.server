@@ -15,7 +15,12 @@ COPY apps ./apps
 COPY packages ./packages
 COPY scripts ./scripts
 
-RUN pnpm install --frozen-lockfile --prefer-offline
+RUN if [ -f vendor/hofos/use-local-hofos-packages.mjs ]; then \
+      node vendor/hofos/use-local-hofos-packages.mjs \
+      && pnpm install --no-frozen-lockfile --prefer-offline; \
+    else \
+      pnpm install --frozen-lockfile --prefer-offline; \
+    fi
 RUN pnpm --filter @driveai/server... build
 RUN pnpm --filter @driveai/web build
 

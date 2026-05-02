@@ -18,6 +18,7 @@ function apiBase(): string {
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${apiBase()}${path}`, {
+    credentials: init?.credentials ?? "include",
     ...init,
     headers: { "content-type": "application/json", ...init?.headers },
   });
@@ -38,6 +39,7 @@ export type DriveItem = {
 async function commandJson<T>(name: string, payload: Record<string, unknown>): Promise<T> {
   const r = await fetch(`${apiBase()}/api/commands`, {
     method: "POST",
+    credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name, payload }),
   });
@@ -119,6 +121,7 @@ export const driveApi = {
       upload.proxyUploadUrl ?? `/api/blobs/put?key=${encodeURIComponent(upload.s3Key)}`;
     return fetch(`${apiBase()}${proxyPath}`, {
       method: "PUT",
+      credentials: "include",
       body: file,
       headers: { "content-type": file.type || "application/octet-stream" },
     });

@@ -33,4 +33,21 @@ test.describe("dev harness (start stack: make dev, or set PLAYWRIGHT_START_STACK
     await page.getByRole("button", { name: /Command palette/ }).click();
     await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
   });
+
+  test("deep file route does not get blocked by drive bootstrap", async ({ page }) => {
+    await page.route("**/api/drives", (route) => route.fulfill({ status: 401, body: "missing session" }));
+    await page.route("**/api/items/file_missing", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          item: { id: "file_missing", name: "Deep linked file", type: "document", size: 12 },
+        }),
+      }),
+    );
+    await page.goto("/drive/file/file_missing", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByText("Could not load Drive")).toHaveCount(0);
+    await expect(page.getByText("Deep linked file")).toBeVisible();
+  });
 });

@@ -17,6 +17,7 @@ import {
   HofShellLayout,
   LucideIconByName,
   fetchHofShellUser,
+  signOutOfHofShell,
   type HofShellNavGroup,
   type HofShellUser,
 } from "@hofos/shell-ui";
@@ -30,8 +31,8 @@ import {
   type CommandItem,
 } from "@hofos/ux";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
-
 import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
+
 type DriveView =
   | { mode: "folder"; folderId: string }
   | { mode: "file"; fileId: string }
@@ -557,7 +558,7 @@ function DriveShell() {
     [appLinks, nav, t],
   );
 
-  if (drivesQ.isError) {
+  if (drivesQ.isError && viewMode.mode !== "file") {
     const msg = drivesQ.error instanceof Error ? drivesQ.error.message : String(drivesQ.error);
     const looks401 = /(^|\D)401(\D|$)/.test(msg);
     return (
@@ -927,11 +928,12 @@ function DriveShell() {
     <HofShellLayout
       appId="driveai"
       appLabel="Drive"
-      appIcon="folder"
+      appIcon="hard-drive"
       currentPath={pathname}
       primaryNavGroups={driveNavGroups}
       appLinks={appLinks}
       user={shellUser}
+      onSignOut={() => signOutOfHofShell()}
       onCommand={() => set({ open: true, query: "" })}
       onNavigate={(path) => {
         if (path.startsWith("/") && !path.startsWith("/__subapps/")) nav(path);
@@ -946,7 +948,6 @@ function DriveShell() {
         commands={paletteCommands}
         inputValue={query}
         onInputValueChange={(nextQuery) => set({ query: nextQuery })}
-        placeholder="Go to, search, actions..."
       />
     </HofShellLayout>
   );
