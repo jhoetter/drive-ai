@@ -89,6 +89,7 @@ function useKeyboardPalette() {
 }
 
 const OFFICE_FILE_EXTENSIONS = new Set(["docx", "xlsx", "pptx", "pdf"]);
+const DRIVEAI_OS_SUBAPP_PREFIX = "/__subapps/driveai";
 
 function positiveIntParam(value: string | null, fallback: number): number {
   const n = Number.parseInt(value ?? "", 10);
@@ -119,8 +120,12 @@ function isOfficeEditable(item: DriveItem): boolean {
 function openOfficeEditor(item: DriveItem): void {
   if (!item.s3Key) return;
   const url = new URL("/edit-asset", hofOsBaseUrl());
+  const currentDrivePath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const returnPath = currentDrivePath.startsWith(`${DRIVEAI_OS_SUBAPP_PREFIX}/`)
+    ? currentDrivePath
+    : `${DRIVEAI_OS_SUBAPP_PREFIX}${currentDrivePath}`;
   url.searchParams.set("key", item.s3Key);
-  url.searchParams.set("from", `${window.location.pathname}${window.location.search}`);
+  url.searchParams.set("from", returnPath);
   window.location.href = url.toString();
 }
 
