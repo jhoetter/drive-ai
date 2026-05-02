@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   activityEvents,
   changeLog,
@@ -56,7 +56,7 @@ async function latestBlobKeys(db: Db, itemIds: string[]): Promise<Map<string, st
       version: fileBlobs.version,
     })
     .from(fileBlobs)
-    .where(inArray(fileBlobs.itemId, itemIds))
+    .where(and(inArray(fileBlobs.itemId, itemIds), ne(fileBlobs.sha256, "pending"))!)
     .orderBy(desc(fileBlobs.version));
   const keys = new Map<string, string>();
   for (const row of rows) {
@@ -74,9 +74,12 @@ function ident(
 }
 
 export async function buildApp(deps: AppDeps) {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 250 * 1024 * 1024 });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(websocket);
+  app.addContentTypeParser("*", { parseAs: "buffer" }, (_req, body, done) => {
+    done(null, body);
+  });
   registerSsoMiddleware(app);
 
   app.addHook("preHandler", async (req) => {
@@ -168,7 +171,7 @@ export async function buildApp(deps: AppDeps) {
     const [fb] = await db
       .select()
       .from(fileBlobs)
-      .where(eq(fileBlobs.itemId, req.params.id))
+      .where(and(eq(fileBlobs.itemId, req.params.id), ne(fileBlobs.sha256, "pending"))!)
       .orderBy(desc(fileBlobs.version))
       .limit(1);
     if (!fb) return reply.status(404).send({ error: { code: "no_blob" } });
@@ -211,10 +214,17 @@ export async function buildApp(deps: AppDeps) {
     );
     const offset = (page - 1) * limit;
     const type = String(req.query.type ?? "");
+    const completedFileExists = sql`exists (
+      select 1 from ${fileBlobs}
+      where ${fileBlobs.itemId} = ${items.id}
+        and ${fileBlobs.sha256} <> 'pending'
+    )`;
     const filter = and(
       eq(items.parentId, parentId),
       isNull(items.trashedAt),
       type === "file" || type === "folder" ? eq(items.type, type) : undefined,
+      type === "file" ? completedFileExists : undefined,
+      type === "folder" ? undefined : sql`(${items.type} <> 'file' or ${completedFileExists})`,
     )!;
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)` })
@@ -366,11 +376,10 @@ export async function buildApp(deps: AppDeps) {
   }>("/api/blobs/put", async (req) => {
     const key = req.query.key;
     if (!key) return { error: "missing key" };
-    const chunks: Buffer[] = [];
-    for await (const chunk of req.raw) {
-      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-    }
-    const buf = Buffer.concat(chunks);
+    const body = req.body;
+    const buf = Buffer.isBuffer(body)
+      ? body
+      : Buffer.from(typeof body === "string" ? body : "");
     const ct = (req.headers["content-type"] as string) || "application/octet-stream";
     await deps.blob.putObject(key, buf, ct);
     return { ok: true, bytes: buf.length };

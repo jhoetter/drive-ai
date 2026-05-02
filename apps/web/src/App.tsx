@@ -20,18 +20,16 @@ import {
   type HofShellNavGroup,
   type HofShellUser,
 } from "@hofos/shell-ui";
-import { BriefcaseBusiness, Command, FileText, Folder, FolderUp, Home, LayoutGrid, List, Mail, MessageCircle, Upload } from "lucide-react";
+import { Command, FolderUp, LayoutGrid, List, Upload } from "lucide-react";
 import { create } from "zustand";
+import {
+  CommandPalette as HofCommandPalette,
+  createAppLinkCommands,
+  useRegisteredSearchShortcut,
+  useShortcut,
+  type CommandItem,
+} from "@hofos/ux";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
-
-const GLOBAL_APP_LINKS = [
-  { id: "os", label: "App", href: "http://localhost:3000/", icon: Home },
-  { id: "hofos", label: "hofOS", href: "http://localhost:3000/__subapps/hofos/customers", icon: BriefcaseBusiness },
-  { id: "mailai", label: "Mail", href: "http://localhost:3000/__subapps/mailai/inbox", icon: Mail },
-  { id: "collabai", label: "Chat", href: "http://localhost:3000/__subapps/collabai/", icon: MessageCircle },
-  { id: "driveai", label: "Drive", href: "/drive/home", icon: Folder },
-  { id: "pagesai", label: "Pages", href: "http://localhost:3000/__subapps/pagesai/pages", icon: FileText },
-] as const;
 
 type DriveView =
   | { mode: "folder"; folderId: string }
@@ -74,17 +72,20 @@ const usePalette = create<{
 }));
 
 function useKeyboardPalette() {
-  const set = usePalette((s) => s.set);
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        set({ open: true, query: "" });
-      }
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [set]);
+  const set = usePalette((state) => state.set);
+  useShortcut(
+    useMemo(
+      () => [
+        {
+          key: "k",
+          meta: true,
+          description: "Open command palette",
+          run: () => set({ open: true, query: "" }),
+        },
+      ],
+      [set],
+    ),
+  );
 }
 
 const OFFICE_FILE_EXTENSIONS = new Set(["docx", "xlsx", "pptx", "pdf"]);
@@ -95,10 +96,15 @@ function positiveIntParam(value: string | null, fallback: number): number {
 }
 
 function hofOsBaseUrl(): string {
-  const env = (import.meta as unknown as {
-    env?: { VITE_HOF_OS_PUBLIC_URL?: string; HOF_OS_PUBLIC_URL?: string };
-  }).env;
-  const configured = (env?.VITE_HOF_OS_PUBLIC_URL || env?.HOF_OS_PUBLIC_URL || "").replace(/\/$/, "");
+  const env = (
+    import.meta as unknown as {
+      env?: { VITE_HOF_OS_PUBLIC_URL?: string; HOF_OS_PUBLIC_URL?: string };
+    }
+  ).env;
+  const configured = (env?.VITE_HOF_OS_PUBLIC_URL || env?.HOF_OS_PUBLIC_URL || "").replace(
+    /\/$/,
+    "",
+  );
   if (configured) return configured;
   if (window.location.hostname === "localhost") return "http://localhost:3000";
   return `${window.location.protocol}//app.${window.location.hostname.replace(/^drive\./, "")}`;
@@ -144,7 +150,12 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
         <button
           type="button"
           onClick={props.onBack}
-          style={{ marginTop: 8, borderRadius: 8, border: "1px solid var(--dri-border)", padding: "6px 10px" }}
+          style={{
+            marginTop: 8,
+            borderRadius: 8,
+            border: "1px solid var(--dri-border)",
+            padding: "6px 10px",
+          }}
         >
           {t("back")}
         </button>
@@ -208,6 +219,7 @@ function DriveShell() {
   const [view, setView] = useState<"list" | "grid">("list");
   const { open, query, set } = usePalette();
   useKeyboardPalette();
+  useRegisteredSearchShortcut();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const staleFolderRedirectRef = useRef(false);
@@ -242,7 +254,7 @@ function DriveShell() {
     viewMode.mode === "folder"
       ? viewMode.folderId
       : viewMode.mode === "myDriveDefault" || viewMode.mode === "home"
-        ? root?.rootFolderId ?? undefined
+        ? (root?.rootFolderId ?? undefined)
         : undefined;
 
   const inFolder =
@@ -303,14 +315,14 @@ function DriveShell() {
   const hasSearchCriteria = useMemo(() => {
     return Boolean(
       (searchFilters.q && searchFilters.q.length > 0) ||
-        searchFilters.type ||
-        searchFilters.owner ||
-        searchFilters.driveId ||
-        searchFilters.folderId ||
-        searchFilters.modifiedAfter ||
-        searchFilters.modifiedBefore ||
-        searchFilters.label ||
-        searchFilters.trash,
+      searchFilters.type ||
+      searchFilters.owner ||
+      searchFilters.driveId ||
+      searchFilters.folderId ||
+      searchFilters.modifiedAfter ||
+      searchFilters.modifiedBefore ||
+      searchFilters.label ||
+      searchFilters.trash,
     );
   }, [searchFilters]);
 
@@ -436,11 +448,7 @@ function DriveShell() {
       contentType: f.type || "application/octet-stream",
       size: f.size,
     });
-    const put = await fetch(init.uploadUrl, {
-      method: "PUT",
-      body: f,
-      headers: f.type ? { "content-type": f.type } : {},
-    });
+    const put = await driveApi.uploadBytes(init, f);
     if (!put.ok) {
       await driveApi.abandonUpload({ fileId: init.fileId });
       throw new Error(`store failed (${put.status})`);
@@ -529,9 +537,13 @@ function DriveShell() {
         >
           {msg}
         </pre>
-        <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>{t("apiErrorHint")}</p>
+        <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
+          {t("apiErrorHint")}
+        </p>
         {looks401 && (
-          <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>{t("jwtDevHint")}</p>
+          <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
+            {t("jwtDevHint")}
+          </p>
         )}
         <button
           type="button"
@@ -565,7 +577,9 @@ function DriveShell() {
         return (
           <div style={{ padding: 24, maxWidth: 520 }}>
             <p style={{ fontWeight: 600 }}>{t("notConfigured")}</p>
-            <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>{t("apiErrorHint")}</p>
+            <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
+              {t("apiErrorHint")}
+            </p>
           </div>
         );
       }
@@ -574,7 +588,11 @@ function DriveShell() {
   }
 
   const rows: DriveItem[] = (() => {
-    if (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home") {
+    if (
+      viewMode.mode === "folder" ||
+      viewMode.mode === "myDriveDefault" ||
+      viewMode.mode === "home"
+    ) {
       return (childrenQ.data?.items ?? []).map((x) => x.item);
     }
     if (viewMode.mode === "recent") {
@@ -612,7 +630,11 @@ function DriveShell() {
   })();
 
   const listLoading = (() => {
-    if (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home") {
+    if (
+      viewMode.mode === "folder" ||
+      viewMode.mode === "myDriveDefault" ||
+      viewMode.mode === "home"
+    ) {
       return childrenQ.isLoading && !childrenQ.isError;
     }
     if (viewMode.mode === "recent") return recentQ.isLoading;
@@ -659,7 +681,8 @@ function DriveShell() {
   const p = pathname;
   const inFile = viewMode.mode === "file";
   const isNavHome = !inFile && p === "/drive/home";
-  const isNavMyDrive = !inFile && (viewMode.mode === "myDriveDefault" || viewMode.mode === "folder");
+  const isNavMyDrive =
+    !inFile && (viewMode.mode === "myDriveDefault" || viewMode.mode === "folder");
   const isNavRecent = !inFile && p === "/drive/recent";
   const isNavStarred = !inFile && p === "/drive/starred";
   const isNavShared = !inFile && p === "/drive/shared-with-me";
@@ -679,6 +702,7 @@ function DriveShell() {
     >
       <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
         <input
+          data-testid="topbar-search"
           value={qLocal}
           onChange={(e) => setQLocal(e.target.value)}
           onKeyDown={onSearchKeyDown}
@@ -738,16 +762,35 @@ function DriveShell() {
         {t("openPalette")}
       </button>
       {viewMode.mode !== "file" && (
-        <div style={{ display: "flex", border: "1px solid var(--dri-border)", borderRadius: 6, flexShrink: 0 }}>
-          <button type="button" onClick={() => setView("list")} style={{ background: "transparent", border: "none" }} aria-pressed={view === "list"}>
+        <div
+          style={{
+            display: "flex",
+            border: "1px solid var(--dri-border)",
+            borderRadius: 6,
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setView("list")}
+            style={{ background: "transparent", border: "none" }}
+            aria-pressed={view === "list"}
+          >
             <List size={16} />
           </button>
-          <button type="button" onClick={() => setView("grid")} style={{ background: "transparent", border: "none" }} aria-pressed={view === "grid"}>
+          <button
+            type="button"
+            onClick={() => setView("grid")}
+            style={{ background: "transparent", border: "none" }}
+            aria-pressed={view === "grid"}
+          >
             <LayoutGrid size={16} />
           </button>
         </div>
       )}
-      {preview && <span style={{ color: "var(--dri-text-muted)", fontSize: 12 }}>preview={preview}</span>}
+      {preview && (
+        <span style={{ color: "var(--dri-text-muted)", fontSize: 12 }}>preview={preview}</span>
+      )}
     </header>
   );
 
@@ -757,19 +800,94 @@ function DriveShell() {
       label: "Drive",
       items: [
         { id: "home", label: t("home"), path: "/drive/home", icon: "home", active: isNavHome },
-        { id: "my-drive", label: t("myDrive"), path: "/drive/my-drive", icon: "folder", active: isNavMyDrive },
-        { id: "recent", label: t("recent"), path: "/drive/recent", icon: "clock", active: isNavRecent },
-        { id: "starred", label: t("starred"), path: "/drive/starred", icon: "star", active: isNavStarred },
-        { id: "shared", label: t("sharedWithMe"), path: "/drive/shared-with-me", icon: "users", active: isNavShared },
-        { id: "shared-drives", label: t("sharedDrives"), path: "/drive/shared-drives", icon: "hard-drive", active: isNavSharedDrives },
-        { id: "trash", label: t("trash"), path: "/drive/trash", icon: "trash-2", active: isNavTrash },
+        {
+          id: "my-drive",
+          label: t("myDrive"),
+          path: "/drive/my-drive",
+          icon: "folder",
+          active: isNavMyDrive,
+        },
+        {
+          id: "recent",
+          label: t("recent"),
+          path: "/drive/recent",
+          icon: "clock",
+          active: isNavRecent,
+        },
+        {
+          id: "starred",
+          label: t("starred"),
+          path: "/drive/starred",
+          icon: "star",
+          active: isNavStarred,
+        },
+        {
+          id: "shared",
+          label: t("sharedWithMe"),
+          path: "/drive/shared-with-me",
+          icon: "users",
+          active: isNavShared,
+        },
+        {
+          id: "shared-drives",
+          label: t("sharedDrives"),
+          path: "/drive/shared-drives",
+          icon: "hard-drive",
+          active: isNavSharedDrives,
+        },
+        {
+          id: "trash",
+          label: t("trash"),
+          path: "/drive/trash",
+          icon: "trash-2",
+          active: isNavTrash,
+        },
       ],
     },
   ];
 
+  const appLinks = useMemo(
+    () =>
+      HOF_SHELL_APP_LINKS.map((link) =>
+        link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
+      ),
+    [],
+  );
+
+  const paletteCommands = useMemo<CommandItem[]>(
+    () => [
+      {
+        id: "drive:home",
+        group: "Drive",
+        label: t("home"),
+        perform: () => void nav("/drive/home"),
+      },
+      {
+        id: "drive:my-drive",
+        group: "Drive",
+        label: t("myDrive"),
+        perform: () => void nav("/drive/my-drive"),
+      },
+      {
+        id: "drive:recent",
+        group: "Drive",
+        label: t("recent"),
+        perform: () => void nav("/drive/recent"),
+      },
+      ...createAppLinkCommands(appLinks),
+    ],
+    [appLinks, nav, t],
+  );
+
   const uploadSlot = canUpload ? (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={onFileInputChange} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        style={{ display: "none" }}
+        onChange={onFileInputChange}
+      />
       <input
         ref={folderInputRef}
         type="file"
@@ -778,11 +896,21 @@ function DriveShell() {
         style={{ display: "none" }}
         onChange={onFolderInputChange}
       />
-      <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="hof-shell-command">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+        className="hof-shell-command"
+      >
         <Upload size={14} aria-hidden />
         {t("upload")}
       </button>
-      <button type="button" onClick={() => folderInputRef.current?.click()} disabled={uploading} className="hof-shell-command">
+      <button
+        type="button"
+        onClick={() => folderInputRef.current?.click()}
+        disabled={uploading}
+        className="hof-shell-command"
+      >
         <FolderUp size={14} aria-hidden />
         {t("uploadFolder")}
       </button>
@@ -796,9 +924,7 @@ function DriveShell() {
       appIcon="folder"
       currentPath={pathname}
       primaryNavGroups={driveNavGroups}
-      appLinks={HOF_SHELL_APP_LINKS.map((link) =>
-        link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
-      )}
+      appLinks={appLinks}
       user={shellUser}
       onCommand={() => set({ open: true, query: "" })}
       onNavigate={(path) => {
@@ -808,6 +934,14 @@ function DriveShell() {
       topSlot={uploadSlot}
     >
       {content}
+      <HofCommandPalette
+        open={open}
+        onOpenChange={(nextOpen) => set({ open: nextOpen, query: nextOpen ? query : "" })}
+        commands={paletteCommands}
+        inputValue={query}
+        onInputValueChange={(nextQuery) => set({ query: nextQuery })}
+        placeholder="Go to, search, actions..."
+      />
     </HofShellLayout>
   );
 
@@ -840,94 +974,6 @@ function DriveShell() {
             />
           </main>
         </div>
-        {open && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgb(0 0 0 / 0.4)",
-              display: "flex",
-              alignItems: "start",
-              justifyContent: "center",
-              paddingTop: 100,
-              zIndex: 50,
-            }}
-            onClick={() => set({ open: false })}
-          >
-            <div
-              style={{
-                width: 480,
-                background: "var(--dri-surface-0)",
-                border: "1px solid var(--dri-border)",
-                borderRadius: 12,
-                padding: 12,
-              }}
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label="Command palette"
-            >
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => set({ query: e.target.value })}
-                placeholder="Go to, search, actions…"
-                style={{ width: "100%", border: "none", background: "transparent", fontSize: 16, outline: "none" }}
-              />
-              <ul style={{ listStyle: "none", margin: 8, padding: 0, fontSize: 14 }}>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void nav("/drive/home");
-                      set({ open: false });
-                    }}
-                    style={paletteRowBtn}
-                  >
-                    {t("home")}
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void nav("/drive/my-drive");
-                      set({ open: false });
-                    }}
-                    style={paletteRowBtn}
-                  >
-                    {t("myDrive")}
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void nav("/drive/recent");
-                      set({ open: false });
-                    }}
-                    style={paletteRowBtn}
-                  >
-                    {t("recent")}
-                  </button>
-                </li>
-                {GLOBAL_APP_LINKS.map((app) => (
-                  <li key={app.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.location.href = app.href;
-                        set({ open: false });
-                      }}
-                      style={paletteRowBtn}
-                    >
-                      Open {app.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
       </>,
     );
   }
@@ -937,461 +983,419 @@ function DriveShell() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {shellToolbar}
         {uploadError && (
-        <div
-          style={{
-            padding: "8px 16px",
-            background: "var(--dri-surface-1)",
-            borderBottom: "1px solid var(--dri-border)",
-            color: "var(--dri-text)",
-            fontSize: 14,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <span>{uploadError}</span>
-          <button
-            type="button"
-            onClick={() => setUploadError(null)}
-            style={{ border: "1px solid var(--dri-border)", borderRadius: 6, padding: "2px 8px", background: "var(--dri-surface-0)" }}
-          >
-            {t("dismiss")}
-          </button>
-        </div>
-      )}
-      {viewMode.mode === "search" && (
-        <div
-          style={{
-            padding: "8px 16px",
-            borderBottom: "1px solid var(--dri-border)",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            alignItems: "center",
-          }}
-        >
-          <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>{t("searchFilters")}</span>
-          <button
-            type="button"
-            style={{
-              ...chipStyle,
-              fontWeight: searchFilters.type === "pdf" ? 600 : 400,
-            }}
-            onClick={() =>
-              mergeSearch({ type: searchFilters.type === "pdf" ? null : "pdf", offset: null })
-            }
-          >
-            {t("searchChipPdf")}
-          </button>
-          <button
-            type="button"
-            style={{
-              ...chipStyle,
-              fontWeight: searchFilters.type === "image" ? 600 : 400,
-            }}
-            onClick={() =>
-              mergeSearch({ type: searchFilters.type === "image" ? null : "image", offset: null })
-            }
-          >
-            {t("searchChipImage")}
-          </button>
-          <button
-            type="button"
-            style={{
-              ...chipStyle,
-              fontWeight: searchFilters.type === "word" ? 600 : 400,
-            }}
-            onClick={() =>
-              mergeSearch({ type: searchFilters.type === "word" ? null : "word", offset: null })
-            }
-          >
-            {t("searchChipDocs")}
-          </button>
-          <button
-            type="button"
-            style={{
-              ...chipStyle,
-              fontWeight: searchFilters.owner === "me" ? 600 : 400,
-            }}
-            onClick={() =>
-              mergeSearch({ owner: searchFilters.owner === "me" ? null : "me", offset: null })
-            }
-          >
-            {t("searchChipOwnerMe")}
-          </button>
-          <button
-            type="button"
-            style={{
-              ...chipStyle,
-              fontWeight: searchFilters.trash ? 600 : 400,
-            }}
-            onClick={() =>
-              mergeSearch({ trash: searchFilters.trash ? null : "true", offset: null })
-            }
-          >
-            {t("searchChipTrash")}
-          </button>
-          <button
-            type="button"
-            style={{ ...chipStyle, color: "var(--dri-text-muted)" }}
-            onClick={() => {
-              setQLocal("");
-              void nav({ pathname: "/drive/search", search: "" });
-            }}
-          >
-            {t("searchClearFilters")}
-          </button>
-        </div>
-      )}
-      {inFolder && (
-        <div
-          style={{
-            padding: "8px 16px",
-            borderBottom: "1px solid var(--dri-border)",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            alignItems: "center",
-          }}
-        >
-          <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>{t("typeFilter")}</span>
-          {[
-            { value: "", label: t("filterAll") },
-            { value: "folder", label: t("filterFolders") },
-            { value: "file", label: t("filterFiles") },
-          ].map((chip) => (
-            <button
-              key={chip.value || "all"}
-              type="button"
-              style={{
-                ...chipStyle,
-                fontWeight: (folderType ?? "") === chip.value ? 600 : 400,
-              }}
-              onClick={() =>
-                mergeSearch({
-                  type: chip.value || null,
-                  drive_page: "1",
-                })
-              }
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
-      )}
-      <main
-        id="main-content"
-        style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}
-        tabIndex={-1}
-      >
-        <div style={{ padding: "12px 16px 0 16px" }}>
-          <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>{pageTitle}</h1>
-        </div>
-        {breadQ.data?.segments && breadQ.data.segments.length > 0 && inFolder && (
-          <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--dri-border)" }}>
-            <DriveBreadcrumbs
-              segments={breadQ.data.segments}
-              renderSegment={(s, label) => (
-                <Link
-                  to={s.type === "file" ? `/drive/file/${s.id}` : `/drive/f/${s.id}`}
-                  style={{ color: "inherit", textDecoration: "none" }}
-                >
-                  {label}
-                </Link>
-              )}
-            />
-          </div>
-        )}
-        <div
-          style={{ flex: 1, padding: 16, overflow: "auto", minHeight: 0 }}
-          onDrop={canUpload ? onDrop : undefined}
-          onDragOver={canUpload ? (e) => e.preventDefault() : undefined}
-        >
-        {inFolder && childrenQ.isError && (
-          <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, border: "1px solid var(--dri-border)" }}>
-            <p style={{ fontWeight: 600, marginBottom: 8 }}>{t("childrenLoadError")}</p>
-            <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginBottom: 8 }}>
-              {childrenQ.error instanceof Error ? childrenQ.error.message : String(childrenQ.error)}
-            </p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => void childrenQ.refetch()}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--dri-border)",
-                  background: "var(--dri-surface-1)",
-                  cursor: "pointer",
-                }}
-              >
-                {t("retry")}
-              </button>
-              <button
-                type="button"
-                onClick={() => void nav("/drive/my-drive")}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--dri-border)",
-                  background: "var(--dri-surface-1)",
-                  cursor: "pointer",
-                }}
-              >
-                {t("goToMyDrive")}
-              </button>
-            </div>
-          </div>
-        )}
-        {listLoading && <DriveListSkeleton />}
-        {!listLoading && rows.length === 0 && viewMode.mode === "search" && !hasSearchCriteria && (
-          <p style={{ color: "var(--dri-text-muted)" }}>{t("typeQueryToSearch")}</p>
-        )}
-        {!listLoading && rows.length === 0 && viewMode.mode === "search" && hasSearchCriteria && (
-          <p style={{ color: "var(--dri-text-muted)" }}>{t("noSearchResults")}</p>
-        )}
-        {!listLoading &&
-          rows.length === 0 &&
-          (viewMode.mode === "folder" || viewMode.mode === "myDriveDefault" || viewMode.mode === "home") &&
-          !childrenQ.isError && (
-          <div>
-            <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyFolder")}</p>
-            {canUpload && (
-              <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>{t("uploadDropHint")}</p>
-            )}
-          </div>
-        )}
-        {!listLoading &&
-          rows.length === 0 &&
-          viewMode.mode !== "search" &&
-          !inFolder && (
-            <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyList")}</p>
-          )}
-        {viewMode.mode !== "file" && view === "list" && rows.length > 0 && (
-          <DriveListView
-            columnHeaders={{ name: t("columnName"), type: t("columnType") }}
-            rows={rows}
-            onRowOpen={openItem}
-          />
-        )}
-        {viewMode.mode === "search" && hasSearchCriteria && searchQ.data?.nextOffset != null && rows.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <button
-              type="button"
-              onClick={() => mergeSearch({ offset: String(searchQ.data!.nextOffset) })}
-              style={{
-                ...chipStyle,
-                borderRadius: 8,
-              }}
-            >
-              {t("searchLoadMore")}
-            </button>
-          </div>
-        )}
-        {viewMode.mode !== "file" && view === "grid" && rows.length > 0 && (
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-              gap: 8,
-            }}
-          >
-            {rows.map((r) => (
-              <div
-                key={r.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openItem(r)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openItem(r);
-                  }
-                }}
-                style={{
-                  border: "1px solid var(--dri-border)",
-                  borderRadius: 8,
-                  padding: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <span style={{ fontWeight: 500 }}>{r.name}</span>
-                {r.locationPath ? (
-                  <span style={{ display: "block", fontSize: 12, color: "var(--dri-text-muted)", marginTop: 4 }}>
-                    {r.locationPath}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-        {inFolder && childrenQ.data && childrenQ.data.total > 0 && (
-          <div
-            style={{
+              padding: "8px 16px",
+              background: "var(--dri-surface-1)",
+              borderBottom: "1px solid var(--dri-border)",
+              color: "var(--dri-text)",
+              fontSize: 14,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 12,
-              marginTop: 16,
-              color: "var(--dri-text-muted)",
-              fontSize: 13,
+              gap: 8,
             }}
           >
-            <span>
-              {t("paginationSummary", {
-                start: (childrenQ.data.page - 1) * childrenQ.data.limit + 1,
-                end: Math.min(childrenQ.data.page * childrenQ.data.limit, childrenQ.data.total),
-                total: childrenQ.data.total,
-              })}
+            <span>{uploadError}</span>
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              style={{
+                border: "1px solid var(--dri-border)",
+                borderRadius: 6,
+                padding: "2px 8px",
+                background: "var(--dri-surface-0)",
+              }}
+            >
+              {t("dismiss")}
+            </button>
+          </div>
+        )}
+        {viewMode.mode === "search" && (
+          <div
+            style={{
+              padding: "8px 16px",
+              borderBottom: "1px solid var(--dri-border)",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>
+              {t("searchFilters")}
             </span>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <select
-                value={String(driveLimit)}
-                onChange={(e) =>
+            <button
+              type="button"
+              style={{
+                ...chipStyle,
+                fontWeight: searchFilters.type === "pdf" ? 600 : 400,
+              }}
+              onClick={() =>
+                mergeSearch({ type: searchFilters.type === "pdf" ? null : "pdf", offset: null })
+              }
+            >
+              {t("searchChipPdf")}
+            </button>
+            <button
+              type="button"
+              style={{
+                ...chipStyle,
+                fontWeight: searchFilters.type === "image" ? 600 : 400,
+              }}
+              onClick={() =>
+                mergeSearch({ type: searchFilters.type === "image" ? null : "image", offset: null })
+              }
+            >
+              {t("searchChipImage")}
+            </button>
+            <button
+              type="button"
+              style={{
+                ...chipStyle,
+                fontWeight: searchFilters.type === "word" ? 600 : 400,
+              }}
+              onClick={() =>
+                mergeSearch({ type: searchFilters.type === "word" ? null : "word", offset: null })
+              }
+            >
+              {t("searchChipDocs")}
+            </button>
+            <button
+              type="button"
+              style={{
+                ...chipStyle,
+                fontWeight: searchFilters.owner === "me" ? 600 : 400,
+              }}
+              onClick={() =>
+                mergeSearch({ owner: searchFilters.owner === "me" ? null : "me", offset: null })
+              }
+            >
+              {t("searchChipOwnerMe")}
+            </button>
+            <button
+              type="button"
+              style={{
+                ...chipStyle,
+                fontWeight: searchFilters.trash ? 600 : 400,
+              }}
+              onClick={() =>
+                mergeSearch({ trash: searchFilters.trash ? null : "true", offset: null })
+              }
+            >
+              {t("searchChipTrash")}
+            </button>
+            <button
+              type="button"
+              style={{ ...chipStyle, color: "var(--dri-text-muted)" }}
+              onClick={() => {
+                setQLocal("");
+                void nav({ pathname: "/drive/search", search: "" });
+              }}
+            >
+              {t("searchClearFilters")}
+            </button>
+          </div>
+        )}
+        {inFolder && (
+          <div
+            style={{
+              padding: "8px 16px",
+              borderBottom: "1px solid var(--dri-border)",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>{t("typeFilter")}</span>
+            {[
+              { value: "", label: t("filterAll") },
+              { value: "folder", label: t("filterFolders") },
+              { value: "file", label: t("filterFiles") },
+            ].map((chip) => (
+              <button
+                key={chip.value || "all"}
+                type="button"
+                style={{
+                  ...chipStyle,
+                  fontWeight: (folderType ?? "") === chip.value ? 600 : 400,
+                }}
+                onClick={() =>
                   mergeSearch({
-                    drive_limit: e.currentTarget.value,
+                    type: chip.value || null,
                     drive_page: "1",
                   })
                 }
-                style={{
-                  border: "1px solid var(--dri-border)",
-                  borderRadius: 6,
-                  padding: "6px 8px",
-                  background: "var(--dri-surface-0)",
-                  color: "var(--dri-text)",
-                }}
-                aria-label={t("itemsPerPage")}
               >
-                {[25, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={childrenQ.data.page <= 1}
-                onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page - 1) })}
-                style={{ ...chipStyle, borderRadius: 8, opacity: childrenQ.data.page <= 1 ? 0.5 : 1 }}
-              >
-                {t("previousPage")}
+                {chip.label}
               </button>
-              <button
-                type="button"
-                disabled={!childrenQ.data.hasMore}
-                onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page + 1) })}
-                style={{ ...chipStyle, borderRadius: 8, opacity: childrenQ.data.hasMore ? 1 : 0.5 }}
-              >
-                {t("nextPage")}
-              </button>
-            </div>
+            ))}
           </div>
         )}
-        </div>
-      </main>
-      </div>
-      {open && (
-        <div
+        <main
+          id="main-content"
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgb(0 0 0 / 0.4)",
+            flex: 1,
             display: "flex",
-            alignItems: "start",
-            justifyContent: "center",
-            paddingTop: 100,
-            zIndex: 50,
+            flexDirection: "column",
+            minHeight: 0,
+            overflow: "hidden",
           }}
-          onClick={() => set({ open: false })}
+          tabIndex={-1}
         >
+          <div style={{ padding: "12px 16px 0 16px" }}>
+            <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>{pageTitle}</h1>
+          </div>
+          {breadQ.data?.segments && breadQ.data.segments.length > 0 && inFolder && (
+            <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--dri-border)" }}>
+              <DriveBreadcrumbs
+                segments={breadQ.data.segments}
+                renderSegment={(s, label) => (
+                  <Link
+                    to={s.type === "file" ? `/drive/file/${s.id}` : `/drive/f/${s.id}`}
+                    style={{ color: "inherit", textDecoration: "none" }}
+                  >
+                    {label}
+                  </Link>
+                )}
+              />
+            </div>
+          )}
           <div
-            style={{
-              width: 480,
-              background: "var(--dri-surface-0)",
-              border: "1px solid var(--dri-border)",
-              borderRadius: 12,
-              padding: 12,
-            }}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="Command palette"
+            style={{ flex: 1, padding: 16, overflow: "auto", minHeight: 0 }}
+            onDrop={canUpload ? onDrop : undefined}
+            onDragOver={canUpload ? (e) => e.preventDefault() : undefined}
           >
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => set({ query: e.target.value })}
-              placeholder="Go to, search, actions…"
-              style={{
-                width: "100%",
-                border: "none",
-                background: "transparent",
-                fontSize: 16,
-                outline: "none",
-              }}
-            />
-            <ul style={{ listStyle: "none", margin: 8, padding: 0, fontSize: 14 }}>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void nav("/drive/home");
-                    set({ open: false });
-                  }}
-                  style={paletteRowBtn}
-                >
-                  {t("home")}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void nav("/drive/my-drive");
-                    set({ open: false });
-                  }}
-                  style={paletteRowBtn}
-                >
-                  {t("myDrive")}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void nav("/drive/recent");
-                    set({ open: false });
-                  }}
-                  style={paletteRowBtn}
-                >
-                  {t("recent")}
-                </button>
-              </li>
-              {GLOBAL_APP_LINKS.map((app) => (
-                <li key={app.id}>
+            {inFolder && childrenQ.isError && (
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: 12,
+                  borderRadius: 8,
+                  border: "1px solid var(--dri-border)",
+                }}
+              >
+                <p style={{ fontWeight: 600, marginBottom: 8 }}>{t("childrenLoadError")}</p>
+                <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginBottom: 8 }}>
+                  {childrenQ.error instanceof Error
+                    ? childrenQ.error.message
+                    : String(childrenQ.error)}
+                </p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    onClick={() => {
-                      window.location.href = app.href;
-                      set({ open: false });
+                    onClick={() => void childrenQ.refetch()}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid var(--dri-border)",
+                      background: "var(--dri-surface-1)",
+                      cursor: "pointer",
                     }}
-                    style={paletteRowBtn}
                   >
-                    Open {app.label}
+                    {t("retry")}
                   </button>
-                </li>
-              ))}
-            </ul>
+                  <button
+                    type="button"
+                    onClick={() => void nav("/drive/my-drive")}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid var(--dri-border)",
+                      background: "var(--dri-surface-1)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("goToMyDrive")}
+                  </button>
+                </div>
+              </div>
+            )}
+            {listLoading && <DriveListSkeleton />}
+            {!listLoading &&
+              rows.length === 0 &&
+              viewMode.mode === "search" &&
+              !hasSearchCriteria && (
+                <p style={{ color: "var(--dri-text-muted)" }}>{t("typeQueryToSearch")}</p>
+              )}
+            {!listLoading &&
+              rows.length === 0 &&
+              viewMode.mode === "search" &&
+              hasSearchCriteria && (
+                <p style={{ color: "var(--dri-text-muted)" }}>{t("noSearchResults")}</p>
+              )}
+            {!listLoading &&
+              rows.length === 0 &&
+              (viewMode.mode === "folder" ||
+                viewMode.mode === "myDriveDefault" ||
+                viewMode.mode === "home") &&
+              !childrenQ.isError && (
+                <div>
+                  <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyFolder")}</p>
+                  {canUpload && (
+                    <p style={{ color: "var(--dri-text-muted)", fontSize: 14, marginTop: 8 }}>
+                      {t("uploadDropHint")}
+                    </p>
+                  )}
+                </div>
+              )}
+            {!listLoading && rows.length === 0 && viewMode.mode !== "search" && !inFolder && (
+              <p style={{ color: "var(--dri-text-muted)" }}>{t("emptyList")}</p>
+            )}
+            {viewMode.mode !== "file" && view === "list" && rows.length > 0 && (
+              <DriveListView
+                columnHeaders={{ name: t("columnName"), type: t("columnType") }}
+                rows={rows}
+                onRowOpen={openItem}
+              />
+            )}
+            {viewMode.mode === "search" &&
+              hasSearchCriteria &&
+              searchQ.data?.nextOffset != null &&
+              rows.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => mergeSearch({ offset: String(searchQ.data!.nextOffset) })}
+                    style={{
+                      ...chipStyle,
+                      borderRadius: 8,
+                    }}
+                  >
+                    {t("searchLoadMore")}
+                  </button>
+                </div>
+              )}
+            {viewMode.mode !== "file" && view === "grid" && rows.length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {rows.map((r) => (
+                  <div
+                    key={r.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openItem(r)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openItem(r);
+                      }
+                    }}
+                    style={{
+                      border: "1px solid var(--dri-border)",
+                      borderRadius: 8,
+                      padding: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ fontWeight: 500 }}>{r.name}</span>
+                    {r.locationPath ? (
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: 12,
+                          color: "var(--dri-text-muted)",
+                          marginTop: 4,
+                        }}
+                      >
+                        {r.locationPath}
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+            {inFolder && childrenQ.data && childrenQ.data.total > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginTop: 16,
+                  color: "var(--dri-text-muted)",
+                  fontSize: 13,
+                }}
+              >
+                <span>
+                  {t("paginationSummary", {
+                    start: (childrenQ.data.page - 1) * childrenQ.data.limit + 1,
+                    end: Math.min(childrenQ.data.page * childrenQ.data.limit, childrenQ.data.total),
+                    total: childrenQ.data.total,
+                  })}
+                </span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <select
+                    value={String(driveLimit)}
+                    onChange={(e) =>
+                      mergeSearch({
+                        drive_limit: e.currentTarget.value,
+                        drive_page: "1",
+                      })
+                    }
+                    style={{
+                      border: "1px solid var(--dri-border)",
+                      borderRadius: 6,
+                      padding: "6px 8px",
+                      background: "var(--dri-surface-0)",
+                      color: "var(--dri-text)",
+                    }}
+                    aria-label={t("itemsPerPage")}
+                  >
+                    {[25, 50, 100].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={childrenQ.data.page <= 1}
+                    onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page - 1) })}
+                    style={{
+                      ...chipStyle,
+                      borderRadius: 8,
+                      opacity: childrenQ.data.page <= 1 ? 0.5 : 1,
+                    }}
+                  >
+                    {t("previousPage")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!childrenQ.data.hasMore}
+                    onClick={() => mergeSearch({ drive_page: String(childrenQ.data!.page + 1) })}
+                    style={{
+                      ...chipStyle,
+                      borderRadius: 8,
+                      opacity: childrenQ.data.hasMore ? 1 : 0.5,
+                    }}
+                  >
+                    {t("nextPage")}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        </main>
+      </div>
     </>,
   );
 }
 
 export function App() {
   return (
-    <ThemeProvider attribute="data-theme" storageKey="hof-color-scheme" defaultTheme="system" enableSystem>
+    <ThemeProvider
+      attribute="data-theme"
+      storageKey="hof-color-scheme"
+      defaultTheme="system"
+      enableSystem
+    >
       <Routes>
         <Route path="/" element={<Navigate to="/drive/home" replace />} />
         <Route path="/drive" element={<DriveShell />} />

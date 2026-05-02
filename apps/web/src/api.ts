@@ -110,10 +110,19 @@ export const driveApi = {
     contentType: string;
     size: number;
   }) =>
-    j<{ fileId: string; uploadUrl: string }>("/api/uploads", {
+    j<{ fileId: string; uploadUrl: string; proxyUploadUrl?: string; s3Key: string }>("/api/uploads", {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  uploadBytes: (upload: { proxyUploadUrl?: string; s3Key: string }, file: File) => {
+    const proxyPath =
+      upload.proxyUploadUrl ?? `/api/blobs/put?key=${encodeURIComponent(upload.s3Key)}`;
+    return fetch(`${apiBase()}${proxyPath}`, {
+      method: "PUT",
+      body: file,
+      headers: { "content-type": file.type || "application/octet-stream" },
+    });
+  },
   completeUpload: (body: {
     fileId: string;
     sha256: string;

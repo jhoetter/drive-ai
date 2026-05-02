@@ -1,6 +1,7 @@
-@import "tailwindcss";
 @import "@hofos/shell-ui/fonts.css";
+@import "tailwindcss";
 @import "@hofos/shell-ui/theme.css";
+@import "@hofos/ux/styles.css";
 @import "@driveai-design-system.css";
 @import "../../packages/ui/src/tokens.css";
 

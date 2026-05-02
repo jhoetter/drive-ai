@@ -67,7 +67,12 @@ export async function initUpload(
     contentType,
   });
   await recordSearch(db, i.tenantId, fileId, name, contentType, i.userId, "");
-  return { fileId, uploadUrl: presign, s3Key };
+  return {
+    fileId,
+    uploadUrl: presign,
+    proxyUploadUrl: `/api/blobs/put?key=${encodeURIComponent(s3Key)}`,
+    s3Key,
+  };
 }
 
 export async function completeUpload(db: Db, deps: AppDeps, req: FastifyRequest) {
