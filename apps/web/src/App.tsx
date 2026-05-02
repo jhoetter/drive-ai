@@ -15,7 +15,7 @@ import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from
 import { ThemeProvider } from "next-themes";
 import {
   HofShellLayout,
-  HOF_SHELL_APP_LINKS,
+  LucideIconByName,
   fetchHofShellUser,
   type HofShellNavGroup,
   type HofShellUser,
@@ -31,6 +31,7 @@ import {
 } from "@hofos/ux";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
 
+import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
 type DriveView =
   | { mode: "folder"; folderId: string }
   | { mode: "file"; fileId: string }
@@ -524,10 +525,7 @@ function DriveShell() {
   }, [nav, pathname, rootId, fileId]);
 
   const appLinks = useMemo(
-    () =>
-      HOF_SHELL_APP_LINKS.map((link) =>
-        link.id === "driveai" ? { ...link, href: "/drive/home" } : link,
-      ),
+    () => createHandoffAppLinks({ selfAppId: "driveai", selfHref: "/drive/home" }),
     [],
   );
 
@@ -551,7 +549,10 @@ function DriveShell() {
         label: t("recent"),
         perform: () => void nav("/drive/recent"),
       },
-      ...createAppLinkCommands(appLinks),
+      ...createAppLinkCommands(appLinks, {
+        navigate: (href) => navigateHandoffHref(href),
+        renderIcon: (app) => <LucideIconByName name={app.icon} size={16} />,
+      }),
     ],
     [appLinks, nav, t],
   );
@@ -933,8 +934,8 @@ function DriveShell() {
       user={shellUser}
       onCommand={() => set({ open: true, query: "" })}
       onNavigate={(path) => {
-        if (path.startsWith("/")) nav(path);
-        else window.location.href = path;
+        if (path.startsWith("/") && !path.startsWith("/__subapps/")) nav(path);
+        else navigateHandoffHref(path);
       }}
       topSlot={uploadSlot}
     >
