@@ -11,7 +11,7 @@ import {
   useLocation,
 } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem } from "@driveai/ui";
+import { DriveBreadcrumbs, DriveListSkeleton, DriveListView, DriveNavItem, type DriveListDisplayRow, type DriveListSortDir, type DriveListSortKey } from "@driveai/ui";
 import { ThemeProvider } from "next-themes";
 import {
   HofShellLayout,
@@ -30,7 +30,13 @@ import {
 } from "@hofos/ux";
 import { driveApi, type DriveItem, sha256Hex } from "./api";
 import { DriveToolbar } from "./components/DriveToolbar";
+import { applyDriveStarLocally } from "./drive-star-cache";
+import { sortDriveItems } from "./drive-sort";
 import { driveItemToDisplayRow, searchHitToDriveItem } from "./drive-rows";
+import { NewFolderModal } from "./components/NewFolderModal";
+import { MoveToFolderModal } from "./components/MoveToFolderModal";
+import { RenameItemModal } from "./components/RenameItemModal";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
 import { driveShellSignOut } from "./shell-session";
 
@@ -102,6 +108,16 @@ function positiveIntParam(value: string | null, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function parseDriveSortKey(raw: string | null): DriveListSortKey {
+  const x = (raw ?? "name").toLowerCase();
+  if (x === "modified" || x === "size") return x;
+  return "name";
+}
+
+function parseDriveSortDir(raw: string | null): DriveListSortDir {
+  return (raw ?? "").toLowerCase() === "desc" ? "desc" : "asc";
+}
+
 function hofOsBaseUrl(): string {
   const env = (
     import.meta as unknown as {
@@ -153,6 +169,16 @@ function openOfficeEditor(item: DriveItem): void {
   window.location.href = url.toString();
 }
 
+async function triggerDriveDownload(fileId: string): Promise<void> {
+  const d = await driveApi.download(fileId);
+  const a = document.createElement("a");
+  a.href = d.url;
+  a.target = "_blank";
+  a.rel = "noreferrer";
+  a.download = d.name;
+  a.click();
+}
+
 function FileDetailPane(props: { fileId: string; onBack: () => void }) {
   const { t } = useTranslation("trans");
   const itemQ = useQuery({
@@ -160,13 +186,7 @@ function FileDetailPane(props: { fileId: string; onBack: () => void }) {
     queryFn: () => driveApi.item(props.fileId),
   });
   const onDownload = async () => {
-    const d = await driveApi.download(props.fileId);
-    const a = document.createElement("a");
-    a.href = d.url;
-    a.target = "_blank";
-    a.rel = "noreferrer";
-    a.download = d.name;
-    a.click();
+    await triggerDriveDownload(props.fileId);
   };
 
   if (itemQ.isLoading) {
@@ -244,7 +264,36 @@ function DriveShell() {
   const drivePage = positiveIntParam(searchParams.get("drive_page"), 1);
   const driveLimit = positiveIntParam(searchParams.get("drive_limit"), 25);
   const folderType = searchParams.get("type");
+  const driveSortKey = parseDriveSortKey(searchParams.get("drive_sort"));
+  const driveSortDir = parseDriveSortDir(searchParams.get("drive_order"));
   const qc = useQueryClient();
+
+  const onToggleListStar = useCallback(
+    async (dr: DriveListDisplayRow, nextStarred: boolean) => {
+      const prevStarred = dr.starred ?? false;
+      setUploadError(null);
+      applyDriveStarLocally(qc, dr.id, nextStarred);
+      const refreshStarCaches = () => {
+        void qc.invalidateQueries({ queryKey: ["children"], exact: false });
+        void qc.invalidateQueries({ queryKey: ["starred"], exact: false });
+        void qc.invalidateQueries({ queryKey: ["recent"], exact: false });
+        void qc.invalidateQueries({ queryKey: ["search"], exact: false });
+        void qc.invalidateQueries({ queryKey: ["sharedWithMe"], exact: false });
+        void qc.invalidateQueries({ queryKey: ["trash"], exact: false });
+        void qc.invalidateQueries({ queryKey: ["item", dr.id] });
+      };
+      try {
+        await driveApi.setItemStarred(dr.id, nextStarred);
+        refreshStarCaches();
+      } catch (e) {
+        applyDriveStarLocally(qc, dr.id, prevStarred);
+        refreshStarCaches();
+        const msg = e instanceof Error ? e.message : String(e ?? "");
+        setUploadError(`${t("starToggleError")}: ${msg}`);
+      }
+    },
+    [qc, t],
+  );
   const { open, query, set } = usePalette();
   useKeyboardPalette();
   useRegisteredSearchShortcut();
@@ -256,11 +305,20 @@ function DriveShell() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
   const [folderCreating, setFolderCreating] = useState(false);
   const [shellUser, setShellUser] = useState<HofShellUser | null>(null);
+  const [selectedListItemId, setSelectedListItemId] = useState<string | null>(null);
+  const [movePickerItem, setMovePickerItem] = useState<Pick<DriveItem, "id" | "name" | "type"> | null>(
+    null,
+  );
+  const [renameTarget, setRenameTarget] = useState<Pick<DriveItem, "id" | "name" | "type"> | null>(null);
+  const [trashConfirmTarget, setTrashConfirmTarget] = useState<DriveListDisplayRow | null>(null);
 
   const viewMode = driveView(pathname, rootId, fileId);
+
+  useEffect(() => {
+    setSelectedListItemId(null);
+  }, [pathname, rootId, viewMode.mode]);
 
   useEffect(() => {
     if (viewMode.mode === "search") {
@@ -310,10 +368,7 @@ function DriveShell() {
   const canScopeSearchToFolder = canUpload;
 
   useEffect(() => {
-    if (!canUpload) {
-      setNewFolderOpen(false);
-      setNewFolderName("");
-    }
+    if (!canUpload) setNewFolderOpen(false);
   }, [canUpload]);
 
   const childrenQ = useQuery({
@@ -349,8 +404,19 @@ function DriveShell() {
   const sharedDrivesQ = useQuery({
     queryKey: ["sharedDrives"],
     queryFn: driveApi.sharedDrives,
-    enabled: viewMode.mode === "sharedDrives",
+    staleTime: 120_000,
   });
+
+  const driveRootById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of drivesQ.data?.drives ?? []) {
+      if (d.id && d.rootFolderId) m.set(d.id, d.rootFolderId);
+    }
+    for (const d of sharedDrivesQ.data?.drives ?? []) {
+      if (d.id && d.rootFolderId) m.set(d.id, d.rootFolderId);
+    }
+    return m;
+  }, [drivesQ.data?.drives, sharedDrivesQ.data?.drives]);
   const searchFilters = useMemo(() => {
     const o = searchParams.get("offset");
     return {
@@ -393,6 +459,95 @@ function DriveShell() {
     },
     [searchParams, setSearchParams],
   );
+
+  const refreshAfterStructuralChange = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: ["children"], exact: false });
+    void qc.invalidateQueries({ queryKey: ["recent"] });
+    void qc.invalidateQueries({ queryKey: ["starred"] });
+    void qc.invalidateQueries({ queryKey: ["search"], exact: false });
+    void qc.invalidateQueries({ queryKey: ["sharedWithMe"] });
+    void qc.invalidateQueries({ queryKey: ["sharedDrives"] });
+    void qc.invalidateQueries({ queryKey: ["trash"] });
+  }, [qc]);
+
+  const handleListSortChange = useCallback(
+    (key: DriveListSortKey) => {
+      const same = driveSortKey === key;
+      const nextDir: DriveListSortDir = same
+        ? driveSortDir === "asc"
+          ? "desc"
+          : "asc"
+        : key === "modified"
+          ? "desc"
+          : "asc";
+      mergeSearch({
+        drive_sort: key,
+        drive_order: nextDir,
+        ...(inFolder ? { drive_page: "1" } : {}),
+      });
+    },
+    [driveSortKey, driveSortDir, inFolder, mergeSearch],
+  );
+
+  const triggerDownloadForDisplay = useCallback(
+    async (row: Pick<DriveListDisplayRow, "id" | "type">) => {
+      if (row.type !== "file") return;
+      setUploadError(null);
+      try {
+        await triggerDriveDownload(row.id);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e ?? "");
+        setUploadError(`${t("downloadError")}: ${msg}`);
+      }
+    },
+    [t],
+  );
+
+  const openMovePickerForRow = useCallback((row: Pick<DriveListDisplayRow, "id" | "name" | "type">) => {
+    setMovePickerItem({ id: row.id, name: row.name, type: row.type });
+  }, []);
+
+  const onDragMoveRowToFolder = useCallback(
+    async (dragged: Pick<DriveListDisplayRow, "id" | "type" | "name">, targetFolderId: string) => {
+      if (dragged.id === targetFolderId) return;
+      setUploadError(null);
+      try {
+        await driveApi.moveItem(dragged.id, targetFolderId);
+        setSelectedListItemId((cur) => (cur === dragged.id ? null : cur));
+        refreshAfterStructuralChange();
+        void qc.invalidateQueries({ queryKey: ["item", dragged.id] });
+        void qc.invalidateQueries({ queryKey: ["breadcrumb"], exact: false });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e ?? "");
+        setUploadError(`${t("moveError")}: ${msg}`);
+      }
+    },
+    [qc, refreshAfterStructuralChange, t],
+  );
+
+  const performTrashRow = useCallback(
+    async (dr: DriveListDisplayRow) => {
+      setUploadError(null);
+      try {
+        const kind = dr.type === "folder" ? ("folder" as const) : ("file" as const);
+        await driveApi.trashItem(dr.id, kind);
+        setSelectedListItemId((cur) => (cur === dr.id ? null : cur));
+        refreshAfterStructuralChange();
+        void qc.invalidateQueries({ queryKey: ["item", dr.id] });
+        void qc.invalidateQueries({ queryKey: ["breadcrumb"], exact: false });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e ?? "");
+        setUploadError(`${t("trashError")}: ${msg}`);
+      }
+    },
+    [qc, refreshAfterStructuralChange, t],
+  );
+
+  const openTrashConfirm = useCallback((dr: DriveListDisplayRow) => {
+    setTrashConfirmTarget(dr);
+  }, []);
+
+  const showListRowActions = viewMode.mode !== "trash" && viewMode.mode !== "sharedDrives";
 
   const searchQ = useQuery({
     queryKey: ["search", searchFilters],
@@ -539,8 +694,9 @@ function DriveShell() {
     void qc.invalidateQueries({ queryKey: ["search"] });
   };
 
-  const onDrop: React.DragEventHandler<HTMLDivElement> = async (e) => {
+  const onScrollAreaDrop: React.DragEventHandler<HTMLDivElement> = async (e) => {
     e.preventDefault();
+    if (!e.dataTransfer.files?.length) return;
     await uploadFiles(e.dataTransfer.files);
   };
 
@@ -621,7 +777,7 @@ function DriveShell() {
     [appLinks, canUpload, nav, t],
   );
 
-  const rows: DriveItem[] = (() => {
+  const rows: DriveItem[] = useMemo(() => {
     if (
       viewMode.mode === "folder" ||
       viewMode.mode === "myDriveDefault" ||
@@ -648,13 +804,24 @@ function DriveShell() {
           id: d.rootFolderId!,
           name: d.name,
           type: "folder",
+          driveId: d.id,
+          parentId: null,
         }));
     }
     if (viewMode.mode === "search") {
       return (searchQ.data?.results ?? []).map(searchHitToDriveItem);
     }
     return [];
-  })();
+  }, [
+    viewMode.mode,
+    childrenQ.data,
+    recentQ.data,
+    starredQ.data,
+    trashQ.data,
+    sharedWithMeQ.data,
+    sharedDrivesQ.data,
+    searchQ.data,
+  ]);
 
   const displayLabels = useMemo(
     () => ({
@@ -668,9 +835,19 @@ function DriveShell() {
 
   const locale = i18n.language ?? "en";
 
+  const sortedRows = useMemo(
+    () => sortDriveItems(rows, driveSortKey, driveSortDir),
+    [rows, driveSortKey, driveSortDir],
+  );
+
   const displayRows = useMemo(
-    () => rows.map((row) => driveItemToDisplayRow(row, locale, displayLabels)),
-    [rows, locale, displayLabels],
+    () => sortedRows.map((row) => driveItemToDisplayRow(row, locale, displayLabels)),
+    [sortedRows, locale, displayLabels],
+  );
+
+  const selectedDriveItem = useMemo(
+    () => (selectedListItemId ? sortedRows.find((x) => x.id === selectedListItemId) : undefined),
+    [sortedRows, selectedListItemId],
   );
 
   if (drivesQ.isError && viewMode.mode !== "file") {
@@ -806,15 +983,14 @@ function DriveShell() {
     cursor: "pointer",
   };
 
-  const submitNewFolder = async () => {
-    const name = newFolderName.trim();
+  const submitNewFolderWithName = async (nameRaw: string) => {
+    const name = nameRaw.trim();
     if (!name || !effectiveFolderId) return;
     setUploadError(null);
     setFolderCreating(true);
     try {
       await driveApi.folderCreate(effectiveFolderId, name);
       setNewFolderOpen(false);
-      setNewFolderName("");
       await qc.refetchQueries({ queryKey: ["children", effectiveFolderId] });
       void qc.invalidateQueries({ queryKey: ["search"] });
     } catch (e) {
@@ -848,12 +1024,10 @@ function DriveShell() {
       canUpload={canUpload}
       uploading={uploading}
       folderCreating={folderCreating}
-      newFolderOpen={newFolderOpen}
-      setNewFolderOpen={setNewFolderOpen}
-      newFolderName={newFolderName}
-      setNewFolderName={setNewFolderName}
-      setUploadError={setUploadError}
-      submitNewFolder={submitNewFolder}
+      onRequestNewFolder={() => {
+        setUploadError(null);
+        setNewFolderOpen(true);
+      }}
     />
   );
 
@@ -926,74 +1100,18 @@ function DriveShell() {
         style={{ display: "none" }}
         onChange={onFolderInputChange}
       />
-      {!newFolderOpen ? (
-        <button
-          type="button"
-          onClick={() => {
-            setUploadError(null);
-            setNewFolderOpen(true);
-          }}
-          disabled={uploading || folderCreating}
-          className="hof-shell-command"
-        >
-          <FolderPlus size={14} aria-hidden />
-          {t("newFolder")}
-        </button>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-          <input
-            type="text"
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void submitNewFolder();
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setNewFolderOpen(false);
-                setNewFolderName("");
-              }
-            }}
-            placeholder={t("folderNamePlaceholder")}
-            aria-label={t("folderNamePlaceholder")}
-            autoFocus
-            disabled={folderCreating}
-            style={{
-              width: "100%",
-              minWidth: 0,
-              borderRadius: "var(--hof-radius-md)",
-              border: "1px solid var(--dri-border)",
-              padding: "6px 8px",
-              fontSize: 14,
-              background: "var(--dri-surface-0)",
-              color: "var(--dri-text)",
-            }}
-          />
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => void submitNewFolder()}
-              disabled={folderCreating || !newFolderName.trim()}
-              className="hof-shell-command"
-            >
-              {t("createFolder")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setNewFolderOpen(false);
-                setNewFolderName("");
-              }}
-              disabled={folderCreating}
-              className="hof-shell-command"
-            >
-              {t("cancel")}
-            </button>
-          </div>
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={() => {
+          setUploadError(null);
+          setNewFolderOpen(true);
+        }}
+        disabled={uploading || folderCreating}
+        className="hof-shell-command"
+      >
+        <FolderPlus size={14} aria-hidden />
+        {t("newFolder")}
+      </button>
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
@@ -1068,8 +1186,9 @@ function DriveShell() {
             tabIndex={-1}
           >
             {breadQ.data?.segments && breadQ.data.segments.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
+              <div style={{ marginBottom: 12 }}>
                 <DriveBreadcrumbs
+                  compact
                   segments={breadQ.data.segments}
                   renderSegment={(s, label) => (
                     <Link
@@ -1139,7 +1258,7 @@ function DriveShell() {
         {viewMode.mode === "search" && (
           <div
             style={{
-              padding: `8px ${MAIN_INSET}`,
+              padding: `6px ${MAIN_INSET}`,
               borderBottom: "1px solid var(--dri-border)",
               display: "flex",
               flexWrap: "wrap",
@@ -1147,6 +1266,7 @@ function DriveShell() {
               alignItems: "center",
             }}
           >
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dri-text)" }}>{pageTitle}</span>
             <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>
               {t("searchFilters")}
             </span>
@@ -1222,41 +1342,97 @@ function DriveShell() {
             </button>
           </div>
         )}
-        {inFolder && (
-          <div
+        {inFolder ? (
+          <header
             style={{
-              padding: `8px ${MAIN_INSET}`,
+              padding: `4px ${MAIN_INSET}`,
               borderBottom: "1px solid var(--dri-border)",
               display: "flex",
               flexWrap: "wrap",
-              gap: 8,
               alignItems: "center",
+              gap: "4px 14px",
+              rowGap: 4,
+              background: "var(--dri-surface-0)",
             }}
           >
-            <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>{t("typeFilter")}</span>
-            {[
-              { value: "", label: t("filterAll") },
-              { value: "folder", label: t("filterFolders") },
-              { value: "file", label: t("filterFiles") },
-            ].map((chip) => (
-              <button
-                key={chip.value || "all"}
-                type="button"
-                style={{
-                  ...chipStyle,
-                  fontWeight: (folderType ?? "") === chip.value ? 600 : 400,
-                }}
-                onClick={() =>
-                  mergeSearch({
-                    type: chip.value || null,
-                    drive_page: "1",
-                  })
-                }
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
+            {breadQ.data?.segments && breadQ.data.segments.length > 0 ? (
+              <div style={{ flex: "1 1 12rem", minWidth: 0 }}>
+                <DriveBreadcrumbs
+                  compact
+                  segments={breadQ.data.segments}
+                  renderSegment={(s, label) => (
+                    <Link
+                      to={s.type === "file" ? `/drive/file/${s.id}` : `/drive/f/${s.id}`}
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
+                      {label}
+                    </Link>
+                  )}
+                />
+              </div>
+            ) : (
+              <div style={{ flex: "1 1 0", minWidth: 0 }} aria-hidden />
+            )}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 13, color: "var(--dri-text-muted)" }}>{t("typeFilter")}</span>
+              {[
+                { value: "", label: t("filterAll") },
+                { value: "folder", label: t("filterFolders") },
+                { value: "file", label: t("filterFiles") },
+              ].map((chip) => {
+                const active = (folderType ?? "") === chip.value;
+                return (
+                  <button
+                    key={chip.value || "all"}
+                    type="button"
+                    aria-pressed={active}
+                    style={{
+                      ...chipStyle,
+                      fontWeight: active ? 600 : 500,
+                      color: active ? "var(--dri-text)" : "var(--dri-text-muted)",
+                      borderColor: active
+                        ? "color-mix(in oklab, var(--dri-primary) 72%, var(--dri-border))"
+                        : "color-mix(in oklab, var(--dri-border) 55%, transparent)",
+                      borderWidth: 1,
+                      background: active
+                        ? "color-mix(in oklab, var(--dri-primary) 32%, var(--dri-surface-1))"
+                        : "color-mix(in oklab, var(--dri-text-muted) 11%, transparent)",
+                      boxShadow: active
+                        ? "inset 0 0 0 1px color-mix(in oklab, var(--dri-primary) 42%, transparent)"
+                        : undefined,
+                    }}
+                    onClick={() =>
+                      mergeSearch({
+                        type: chip.value || null,
+                        drive_page: "1",
+                      })
+                    }
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </header>
+        ) : viewMode.mode === "search" ? null : (
+          <header
+            style={{
+              padding: `4px ${MAIN_INSET}`,
+              borderBottom: "1px solid var(--dri-border)",
+              background: "var(--dri-surface-0)",
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--dri-text)" }}>
+              {pageTitle}
+            </h1>
+          </header>
         )}
         <main
           id="main-content"
@@ -1269,33 +1445,111 @@ function DriveShell() {
           }}
           tabIndex={-1}
         >
-          <div style={{ padding: `6px ${MAIN_INSET} 0 ${MAIN_INSET}` }}>
-            <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>{pageTitle}</h1>
-          </div>
-          {breadQ.data?.segments && breadQ.data.segments.length > 0 && inFolder && (
-            <div style={{ padding: `6px ${MAIN_INSET}`, borderBottom: "1px solid var(--dri-border)" }}>
-              <DriveBreadcrumbs
-                segments={breadQ.data.segments}
-                renderSegment={(s, label) => (
-                  <Link
-                    to={s.type === "file" ? `/drive/file/${s.id}` : `/drive/f/${s.id}`}
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
-                    {label}
-                  </Link>
-                )}
-              />
+          {showListRowActions && selectedDriveItem && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+                padding: `8px ${MAIN_INSET}`,
+                borderBottom: "1px solid var(--dri-border)",
+                background: "var(--dri-surface-1)",
+                fontSize: 14,
+              }}
+            >
+              <span style={{ color: "var(--dri-text-muted)", flex: "1 1 8rem", minWidth: "8rem" }}>
+                {t("selectionCount", { count: 1 })}
+              </span>
+              <button
+                type="button"
+                onClick={() => openItem(selectedDriveItem)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--hof-radius-lg)",
+                  border: "1px solid var(--dri-border)",
+                  background: "var(--dri-surface-0)",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                {t("openItem")}
+              </button>
+              {selectedDriveItem.type === "file" ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void triggerDownloadForDisplay({
+                      id: selectedDriveItem.id,
+                      type: selectedDriveItem.type,
+                    })
+                  }
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "var(--hof-radius-lg)",
+                    border: "1px solid var(--dri-border)",
+                    background: "var(--dri-surface-0)",
+                    cursor: "pointer",
+                    fontSize: 14,
+                  }}
+                >
+                  {t("downloadFile")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  openMovePickerForRow({
+                    id: selectedDriveItem.id,
+                    name: selectedDriveItem.name,
+                    type: selectedDriveItem.type,
+                  })
+                }
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--hof-radius-lg)",
+                  border: "1px solid var(--dri-border)",
+                  background: "var(--dri-surface-0)",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                {t("moveAction")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedListItemId(null)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--hof-radius-lg)",
+                  border: "1px solid var(--dri-border)",
+                  background: "var(--dri-surface-0)",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                {t("clearSelection")}
+              </button>
             </div>
           )}
           <div
             style={{
               flex: 1,
-              padding: "8px 0 12px",
+              padding: "0 0 12px",
               overflow: "auto",
               minHeight: 0,
             }}
-            onDrop={canUpload ? onDrop : undefined}
-            onDragOver={canUpload ? (e) => e.preventDefault() : undefined}
+            onDrop={canUpload ? onScrollAreaDrop : undefined}
+            onDragOver={
+              canUpload
+                ? (e) => {
+                    if ([...e.dataTransfer.types].includes("Files")) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "copy";
+                    }
+                  }
+                : undefined
+            }
           >
             {inFolder && childrenQ.isError && (
               <div
@@ -1416,12 +1670,36 @@ function DriveShell() {
                   name: String(t("columnName")),
                   modified: String(t("columnModified")),
                   size: String(t("columnSize")),
+                  starAriaAdd: String(t("starAriaAdd")),
+                  starAriaRemove: String(t("starAriaRemove")),
+                  actions: String(t("columnActions")),
+                  rowActionsMenu: String(t("rowActionsTrigger")),
+                  download: String(t("downloadFile")),
+                  move: String(t("moveAction")),
+                  rename: String(t("renameAction")),
+                  moveToTrash: String(t("trashToBinAction")),
                 }}
                 rows={displayRows}
+                selectedId={selectedListItemId}
+                onRowSelect={(dr) => setSelectedListItemId(dr.id)}
+                onClearSelection={() => setSelectedListItemId(null)}
                 onRowOpen={(dr) => {
-                  const raw = rows.find((x) => x.id === dr.id);
+                  const raw = sortedRows.find((x) => x.id === dr.id);
                   if (raw) openItem(raw);
                 }}
+                sort={{ key: driveSortKey, dir: driveSortDir }}
+                onSortChange={handleListSortChange}
+                showRowActionsMenu={showListRowActions}
+                onRowDownload={showListRowActions ? (dr) => void triggerDownloadForDisplay(dr) : undefined}
+                onRowMove={showListRowActions ? (dr) => openMovePickerForRow(dr) : undefined}
+                onRowRename={
+                  showListRowActions
+                    ? (dr) => setRenameTarget({ id: dr.id, name: dr.name, type: dr.type })
+                    : undefined
+                }
+                onRowTrash={showListRowActions ? openTrashConfirm : undefined}
+                onDragMoveToFolder={showListRowActions ? onDragMoveRowToFolder : undefined}
+                onToggleStar={onToggleListStar}
               />
             )}
             {viewMode.mode === "search" &&
@@ -1515,6 +1793,57 @@ function DriveShell() {
           </div>
         </main>
       </div>
+      <MoveToFolderModal
+        open={movePickerItem != null}
+        onClose={() => setMovePickerItem(null)}
+        item={movePickerItem}
+        driveRootById={driveRootById}
+        fallbackRootFolderId={root?.rootFolderId ?? null}
+        onMoved={() => {
+          setMovePickerItem(null);
+          setSelectedListItemId(null);
+          refreshAfterStructuralChange();
+        }}
+        onError={(msg) => setUploadError(`${t("moveError")}: ${msg}`)}
+      />
+      <NewFolderModal
+        open={newFolderOpen}
+        onClose={() => !folderCreating && setNewFolderOpen(false)}
+        submitting={folderCreating}
+        onSubmit={submitNewFolderWithName}
+      />
+      <RenameItemModal
+        open={renameTarget != null}
+        onClose={() => setRenameTarget(null)}
+        item={renameTarget}
+        onRenamed={() => {
+          refreshAfterStructuralChange();
+          if (renameTarget) {
+            void qc.invalidateQueries({ queryKey: ["item", renameTarget.id] });
+          }
+          void qc.invalidateQueries({ queryKey: ["breadcrumb"], exact: false });
+        }}
+        onError={(msg) => setUploadError(`${t("renameError")}: ${msg}`)}
+      />
+      <ConfirmDialog
+        open={trashConfirmTarget != null}
+        title={String(t("trashToBinAction"))}
+        description={
+          trashConfirmTarget
+            ? `${String(t("trashConfirm"))}\n\n${trashConfirmTarget.name}`
+            : ""
+        }
+        confirmLabel={String(t("trashToBinAction"))}
+        cancelLabel={String(t("cancel"))}
+        danger
+        onCancel={() => setTrashConfirmTarget(null)}
+        onConfirm={async () => {
+          const dr = trashConfirmTarget;
+          if (!dr) return;
+          setTrashConfirmTarget(null);
+          await performTrashRow(dr);
+        }}
+      />
     </>,
   );
 }

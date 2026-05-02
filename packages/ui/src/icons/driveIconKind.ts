@@ -30,7 +30,7 @@ export function driveIconKind(input: {
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
-  if (ext === "pdf") return "pdf";
+  if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (
     mime.includes("spreadsheet") ||
     mime.includes("excel") ||

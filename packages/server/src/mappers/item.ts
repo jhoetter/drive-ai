@@ -12,12 +12,15 @@ export type DriveItemPayload = {
   createdAt: string;
   updatedAt: string;
   s3Key: string | null;
+  starred: boolean;
 };
 
 export function toDriveItemPayload(
   row: typeof items.$inferSelect,
   s3Key?: string | null,
+  options?: { starred?: boolean },
 ): DriveItemPayload {
+  const starred = options?.starred ?? false;
   return {
     id: row.id,
     driveId: row.driveId,
@@ -30,5 +33,6 @@ export function toDriveItemPayload(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     s3Key: s3Key ?? null,
+    starred,
   };
 }

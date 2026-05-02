@@ -9,14 +9,22 @@
   --dri-primary: var(--color-accent, var(--ds-accent, #2383e2));
   --dri-radius: var(--hof-radius-md, var(--ds-radius));
   --dri-focus: 2px solid var(--dri-primary);
+  /* Filled list star (warn/amber from host, else warm gold). */
+  --dri-star-filled: var(--color-warning, #d97706);
   /* Icon chip accents — host --color-* when shell is loaded; fallback to neutrals/dri-primary. */
-  --dri-kind-folder-fg: var(--color-warning, var(--dri-primary));
+  /* Cool blue-grey folder chips — avoids warm warning tones used by starred / slideshows */
+  --dri-kind-folder-fg: color-mix(
+    in oklab,
+    var(--color-accent, var(--dri-primary)) 54%,
+    var(--color-muted-foreground, var(--dri-text-muted)) 46%
+  );
   --dri-kind-image-fg: var(--color-accent, var(--dri-primary));
   --dri-kind-video-fg: color-mix(in oklab, var(--color-accent, var(--dri-primary)) 55%, var(--color-foreground, var(--dri-text)));
   --dri-kind-audio-fg: var(--color-success, var(--dri-primary));
-  --dri-kind-pdf-fg: var(--color-error, var(--dri-primary));
+  /* Clear pillar-box red distinct from amber/orange accents */
+  --dri-kind-pdf-fg: var(--color-error, #dc2626);
   --dri-kind-spreadsheet-fg: color-mix(in oklab, var(--color-success, var(--dri-primary)) 85%, var(--color-accent, var(--dri-primary)));
-  --dri-kind-presentation-fg: color-mix(in oklab, var(--color-warning, var(--dri-primary)) 50%, var(--color-error, var(--dri-primary)));
+  --dri-kind-presentation-fg: var(--color-warning, #ea580c);
   --dri-kind-archive-fg: var(--color-muted-foreground, var(--dri-text-muted));
   --dri-kind-document-fg: color-mix(in oklab, var(--color-accent, var(--dri-primary)) 72%, var(--color-foreground, var(--dri-text)));
   --dri-kind-code-fg: color-mix(in oklab, var(--color-accent, var(--dri-primary)) 58%, var(--color-success, var(--dri-primary)));
@@ -30,6 +38,7 @@
   --dri-text: var(--color-foreground, var(--ds-fg, #e3e2e0));
   --dri-text-muted: var(--color-muted-foreground, var(--ds-fg-muted, #9b9a97));
   --dri-primary: var(--color-accent, var(--ds-accent, #529cca));
+  --dri-star-filled: var(--color-warning, #fbbf24);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,5 +49,6 @@
     --dri-text: var(--color-foreground, var(--ds-fg, #e3e2e0));
     --dri-text-muted: var(--color-muted-foreground, var(--ds-fg-muted, #9b9a97));
     --dri-primary: var(--color-accent, var(--ds-accent, #529cca));
+    --dri-star-filled: var(--color-warning, #fbbf24);
   }
 }

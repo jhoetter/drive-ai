@@ -13,6 +13,7 @@ import {
   type LucideProps,
 } from "lucide-react";
 import { driveIconKind } from "./driveIconKind.js";
+import { PdfFileIcon } from "./PdfFileIcon.js";
 
 /** Small icon badge for drives / MIME / extension (token-colored via wrapper `color`). */
 export function DriveItemIcon(props: {
@@ -41,7 +42,7 @@ export function DriveItemIcon(props: {
     case "audio":
       return <FileAudio {...common} />;
     case "pdf":
-      return <FileText {...common} />;
+      return <PdfFileIcon size={dim} className={props.className} />;
     case "spreadsheet":
       return <FileSpreadsheet {...common} />;
     case "presentation":

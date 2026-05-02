@@ -15,6 +15,7 @@ import { searchDocuments, items, type Db } from "@driveai/db";
 import { capabilitiesFromRole } from "@driveai/core";
 import { ensureIdentity, resolveEffectiveRoleOnItem } from "./identity.js";
 import { getBreadcrumbChain } from "./view-queries.js";
+import { starredFlagsForItems } from "./star-state.js";
 
 export type DriveSearchQuery = {
   q?: string;
@@ -42,8 +43,9 @@ export type DriveSearchResultRow = {
   rank: number;
   match: "name" | "content" | "metadata";
   snippet: string | null;
-  /** Human-readable path from drive root, excluding the item's own name. */
+  /** Breadcrumb from root, excluding this item's name. */
   locationPath: string;
+  starred: boolean;
 };
 
 /** Collect folder id + all descendant item ids (breadth-first). */
@@ -196,7 +198,7 @@ export async function runDriveSearch(
     .limit(overFetch)
     .offset(offset);
 
-  const out: DriveSearchResultRow[] = [];
+  const out: Omit<DriveSearchResultRow, "starred">[] = [];
   for (const r of rows) {
     const res = await resolveEffectiveRoleOnItem(db, userId, r.itemId);
     if (!res) continue;
@@ -233,5 +235,15 @@ export async function runDriveSearch(
 
   const nextOffset = rows.length < overFetch ? null : offset + overFetch;
 
-  return { results: out, nextOffset };
+  const starredMap = await starredFlagsForItems(
+    db,
+    userId,
+    out.map((r) => r.itemId),
+  );
+  const withStarred: DriveSearchResultRow[] = out.map((r) => ({
+    ...r,
+    starred: starredMap.get(r.itemId) ?? false,
+  }));
+
+  return { results: withStarred, nextOffset };
 }

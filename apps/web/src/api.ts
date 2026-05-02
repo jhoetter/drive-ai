@@ -10,6 +10,10 @@ function apiBase(): string {
   if (typeof window !== "undefined") {
     const runtimeBase = window.__DRIVEAI_API_BASE__?.replace(/\/$/, "");
     if (runtimeBase) return runtimeBase;
+    // HofOS bundles use `/api/drive`; Vite proxy only exposes `/api` at the standalone dev server.
+    // If nobody injected __DRIVEAI_API_BASE__, keep requests on `/api/*` during `vite dev`.
+    const env = (import.meta as unknown as { env?: { DEV?: boolean; HOFOS_MODE?: boolean } }).env;
+    if (env?.DEV && env.HOFOS_MODE) return "";
   }
   const hofosMode = (import.meta as unknown as { env?: { HOFOS_MODE?: boolean } }).env
     ?.HOFOS_MODE;
@@ -38,6 +42,10 @@ export type DriveItem = {
   createdAt?: string | null;
   updatedAt?: string | null;
   trashedAt?: string | null;
+  starred?: boolean;
+  /** Present on server payloads; used for moves across drives */
+  driveId?: string | null;
+  parentId?: string | null;
 };
 
 async function commandJson<T>(name: string, payload: Record<string, unknown>): Promise<T> {
@@ -150,6 +158,14 @@ export const driveApi = {
     commandJson<{ folderId: string }>("folder:ensurePath", { parentId, segments }),
   folderCreate: (parentId: string, name: string) =>
     commandJson<{ id: string }>("folder:create", { parentId, name }),
+  setItemStarred: (id: string, starred: boolean) =>
+    commandJson<{ id: string; starred: boolean }>("item:set-starred", { id, starred }),
+  moveItem: (id: string, parentId: string) =>
+    commandJson<{ id: string; parentId: string }>("item:move", { id, parentId }),
+  renameItem: (id: string, name: string) =>
+    commandJson<{ id: string; name: string }>("item:rename", { id, name }),
+  trashItem: (id: string, kind: "file" | "folder") =>
+    commandJson<{ trashed: string }>(kind === "folder" ? "folder:trash" : "file:trash", { id }),
 };
 
 export async function sha256Hex(buf: ArrayBuffer): Promise<string> {

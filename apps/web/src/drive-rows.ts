@@ -37,6 +37,7 @@ export function driveItemToDisplayRow(
     sizeLabel,
     modifiedLabel,
     kindLabel: kind,
+    starred: Boolean(item.starred),
   };
 }
 
@@ -50,5 +51,8 @@ export function searchHitToDriveItem(hit: SearchHit): DriveItem {
     updatedAt: hit.updatedAt,
     snippet: hit.snippet,
     locationPath: hit.locationPath ?? null,
+    starred: hit.starred ?? false,
+    driveId: hit.driveId,
+    parentId: hit.parentId,
   };
 }

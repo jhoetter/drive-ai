@@ -10,14 +10,22 @@ import {
 import { resolveEffectiveRoleOnItem } from "./identity.js";
 import { toDriveItemPayload, type DriveItemPayload } from "../mappers/item.js";
 import { latestBlobKeysForItems } from "./blob-keys.js";
+import { starredFlagsForItems } from "./star-state.js";
 
 async function mapItemsWithBlobKeys(
   db: Db,
+  userId: string,
   rows: (typeof items.$inferSelect)[],
 ): Promise<{ item: DriveItemPayload }[]> {
+  const ids = rows.map((r) => r.id);
+  const flags = await starredFlagsForItems(db, userId, ids);
   const fileIds = rows.filter((r) => r.type === "file").map((r) => r.id);
   const keys = await latestBlobKeysForItems(db, fileIds);
-  return rows.map((row) => ({ item: toDriveItemPayload(row, keys.get(row.id)) }));
+  return rows.map((row) => ({
+    item: toDriveItemPayload(row, keys.get(row.id), {
+      starred: flags.get(row.id) ?? false,
+    }),
+  }));
 }
 
 /**
@@ -59,6 +67,7 @@ export async function listStarred(
     .orderBy(desc(userItemState.lastViewedAt), desc(items.updatedAt));
   return mapItemsWithBlobKeys(
     db,
+    userId,
     joined.map((x) => x.items),
   );
 }
@@ -86,7 +95,7 @@ export async function listSharedWithMe(
   for (const j of joined) {
     if (!seen.has(j.items.id)) seen.set(j.items.id, j.items);
   }
-  return mapItemsWithBlobKeys(db, [...seen.values()]);
+  return mapItemsWithBlobKeys(db, userId, [...seen.values()]);
 }
 
 export async function listRecent(
@@ -121,7 +130,7 @@ export async function listRecent(
   const ordered = ids
     .map((id) => byId.get(id))
     .filter((row): row is typeof items.$inferSelect => row != null && row.trashedAt == null);
-  return mapItemsWithBlobKeys(db, ordered);
+  return mapItemsWithBlobKeys(db, userId, ordered);
 }
 
 export async function listTrash(
@@ -141,7 +150,7 @@ export async function listTrash(
     const r = await resolveEffectiveRoleOnItem(db, userId, row.id);
     if (r) allowed.push(row);
   }
-  return mapItemsWithBlobKeys(db, allowed);
+  return mapItemsWithBlobKeys(db, userId, allowed);
 }
 
 export async function listSharedDrives(

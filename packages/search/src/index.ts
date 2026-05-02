@@ -31,6 +31,8 @@ export interface SearchHit {
   snippet: string | null;
   /** Breadcrumb from root, excluding this item. */
   locationPath?: string;
+  /** Per-user star from user_item_state. */
+  starred?: boolean;
 }
 
 export interface SearchResponse {

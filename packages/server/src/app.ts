@@ -31,6 +31,7 @@ import { runDriveSearch } from "./services/drive-search.js";
 import { registerSsoMiddleware } from "./middleware/sso.js";
 import { registerStaticWeb } from "./static-web.js";
 import { toDriveItemPayload } from "./mappers/item.js";
+import { starredFlagsForItems } from "./services/star-state.js";
 import { latestBlobKeysForItems } from "./services/blob-keys.js";
 
 function ident(
@@ -162,8 +163,11 @@ export async function buildApp(deps: AppDeps) {
     const [row] = await db.select().from(items).where(eq(items.id, req.params.id));
     if (!row) return reply.status(404).send({ error: { code: "not_found" } });
     const keys = await latestBlobKeysForItems(db, row.type === "file" ? [row.id] : []);
+    const starMap = await starredFlagsForItems(db, i.userId, [row.id]);
     return {
-      item: toDriveItemPayload(row, keys.get(row.id)),
+      item: toDriveItemPayload(row, keys.get(row.id), {
+        starred: starMap.get(row.id) ?? false,
+      }),
       capabilities: capabilitiesFromRole(res.role, { isOwner: res.driveOwnerId === i.userId }),
     };
   });
@@ -213,8 +217,17 @@ export async function buildApp(deps: AppDeps) {
       db,
       rows.filter((it) => it.type === "file").map((it) => it.id),
     );
+    const starMap = await starredFlagsForItems(
+      db,
+      i.userId,
+      rows.map((it) => it.id),
+    );
     return {
-      items: rows.map((it) => ({ item: toDriveItemPayload(it, keys.get(it.id)) })),
+      items: rows.map((it) => ({
+        item: toDriveItemPayload(it, keys.get(it.id), {
+          starred: starMap.get(it.id) ?? false,
+        }),
+      })),
       page,
       limit,
       total: Number(total),
