@@ -36,6 +36,8 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    /** Required for top-level `await` in `main.tsx` (`consumeHofHandoff`). */
+    target: "es2022",
   },
   define: {
     "import.meta.env.HOFOS_MODE": JSON.stringify(process.env.HOFOS_MODE === "1"),
