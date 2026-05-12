@@ -12,8 +12,8 @@
   "dependencies": {
     "@driveai/search": "workspace:*",
     "@driveai/ui": "workspace:*",
-    "@hofos/shell-ui": "^0.1.0",
-    "@hofos/ux": "^0.1.0",
+    "@hofos/shell-ui": "file:../../vendor/hofos/hofos-shell-ui-0.1.0.tgz",
+    "@hofos/ux": "file:../../vendor/hofos/hofos-ux-0.1.0.tgz",
     "@tanstack/react-query": "^5.66.0",
     "cmdk": "^1.1.1",
     "i18next": "^24.0.0",

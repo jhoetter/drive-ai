@@ -38,7 +38,7 @@ import { NewFolderModal } from "./components/NewFolderModal";
 import { MoveToFolderModal } from "./components/MoveToFolderModal";
 import { RenameItemModal } from "./components/RenameItemModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
-import { createHandoffAppLinks, navigateHandoffHref } from "./hofShellNavigation";
+import { navigateHandoffHref, useHandoffAppLinks } from "./hofShellNavigation";
 import { driveShellSignOut } from "./shell-session";
 
 /** Horizontal inset for main column chrome (breadcrumb, lists, messages). */
@@ -740,10 +740,7 @@ function DriveShell() {
     }
   }, [nav, pathname, rootId, fileId]);
 
-  const appLinks = useMemo(
-    () => createHandoffAppLinks({ selfAppId: "driveai", selfHref: "/drive/home" }),
-    [],
-  );
+  const appLinks = useHandoffAppLinks({ selfAppId: "driveai", selfHref: "/drive/home" });
 
   const paletteCommands = useMemo<CommandItem[]>(
     () => [

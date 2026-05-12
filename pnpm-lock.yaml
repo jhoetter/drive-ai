@@ -33,11 +33,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@hofos/shell-ui':
-        specifier: ^0.1.0
-        version: 0.1.0(lucide-react@0.460.0(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: file:../../vendor/hofos/hofos-shell-ui-0.1.0.tgz
+        version: file:vendor/hofos/hofos-shell-ui-0.1.0.tgz(lucide-react@0.460.0(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@hofos/ux':
-        specifier: ^0.1.0
-        version: 0.1.0(cmdk@1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: file:../../vendor/hofos/hofos-ux-0.1.0.tgz
+        version: file:vendor/hofos/hofos-ux-0.1.0.tgz(cmdk@1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tanstack/react-query':
         specifier: ^5.66.0
         version: 5.100.5(react@19.2.5)
@@ -1347,15 +1347,17 @@ packages:
   '@fastify/websocket@11.2.0':
     resolution: {integrity: sha512-3HrDPbAG1CzUCqnslgJxppvzaAZffieOVbLp1DAy1huCSynUWPifSvfdEDUR8HlJLp3sp1A36uOM2tJogADS8w==}
 
-  '@hofos/shell-ui@0.1.0':
-    resolution: {integrity: sha512-dOPsty+0KNoKPcA31bOZUY+iuQXw2/xDIDnndy2rw0dYEn5Iy/huRvnMoZfyeLPi+90AM9bAaMNFX65ipj3XFQ==}
+  '@hofos/shell-ui@file:vendor/hofos/hofos-shell-ui-0.1.0.tgz':
+    resolution: {integrity: sha512-RpjW+rdfpqjGP8oDxLLSs3BM5DmFqjXZRsSUmpbwIN+E4hIQ2uXwAUJ9YZelHjfXTg7eJtIywdju2L5REjRZTQ==, tarball: file:vendor/hofos/hofos-shell-ui-0.1.0.tgz}
+    version: 0.1.0
     peerDependencies:
       lucide-react: '>=0.460.0'
       react: '>=18.3.0'
       react-dom: '>=18.3.0'
 
-  '@hofos/ux@0.1.0':
-    resolution: {integrity: sha512-eM8uiSSUhG9Bpx2m9gh5T0QUXF4mdeqnv0rlLX8kqMTqs5hhiNwHUxVTOloY9qE2HwBJFY1P+IzRTb4NWnCy/g==}
+  '@hofos/ux@file:vendor/hofos/hofos-ux-0.1.0.tgz':
+    resolution: {integrity: sha512-D+6vDzVdnTyep5mygxJHxSPdo9tOYF89jQp87bWwkoB5/5osLwYVaEujcIzdSFAkKUvhlAngRZYc160OeFupAg==, tarball: file:vendor/hofos/hofos-ux-0.1.0.tgz}
+    version: 0.1.0
     peerDependencies:
       cmdk: '>=1.1.0'
       react: '>=18.3.0'
@@ -4357,13 +4359,13 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@hofos/shell-ui@0.1.0(lucide-react@0.460.0(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@hofos/shell-ui@file:vendor/hofos/hofos-shell-ui-0.1.0.tgz(lucide-react@0.460.0(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       lucide-react: 0.460.0(react@19.2.5)
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
-  '@hofos/ux@0.1.0(cmdk@1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@hofos/ux@file:vendor/hofos/hofos-ux-0.1.0.tgz(cmdk@1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       cmdk: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       react: 19.2.5
